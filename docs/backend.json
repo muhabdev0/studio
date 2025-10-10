@@ -239,57 +239,25 @@
     ]
   },
   "firestore": {
-    "structure": [
-      {
-        "path": "/employees/{employeeId}",
-        "definition": {
-          "entityName": "Employee",
-          "schema": {
-            "$ref": "#/entities/Employee"
-          },
-          "description": "Stores employee profiles. Only admins should have write access."
-        }
-      },
-      {
-        "path": "/buses/{busId}",
-        "definition": {
-          "entityName": "Bus",
-          "schema": {
-            "$ref": "#/entities/Bus"
-          },
-          "description": "Stores bus information. Only admins should have write access."
-        }
-      },
-      {
-        "path": "/trips/{tripId}",
-        "definition": {
-          "entityName": "Trip",
-          "schema": {
-            "$ref": "#/entities/Trip"
-          },
-          "description": "Stores trip details. Only admins should have write access."
-        }
-      },
-      {
-        "path": "/trips/{tripId}/ticketBookings/{ticketBookingId}",
-        "definition": {
-          "entityName": "TicketBooking",
-          "schema": {
-            "$ref": "#/entities/TicketBooking"
-          },
-          "description": "Stores ticket booking information for a specific trip. Authenticated users can create bookings, admins can manage them."
-        }
-      },
-      {
-        "path": "/financeRecords/{financeRecordId}",
-        "definition": {
-          "entityName": "FinanceRecord",
-          "schema": {
-            "$ref": "#/entities/FinanceRecord"
-          },
-          "description": "Stores financial records. Only admins should have write access."
-        }
-      }
-    ]
+    "/employees/{employeeId}": {
+      "schema": { "$ref": "#/entities/Employee" },
+      "description": "Stores employee profiles. Only admins should have write access."
+    },
+    "/buses/{busId}": {
+      "schema": { "$ref": "#/entities/Bus" },
+      "description": "Stores bus information. Only admins should have write access."
+    },
+    "/trips/{tripId}": {
+      "schema": { "$ref": "#/entities/Trip" },
+      "description": "Stores trip details. Only admins should have write access."
+    },
+    "/trips/{tripId}/ticketBookings/{ticketBookingId}": {
+      "schema": { "$ref": "#/entities/TicketBooking" },
+      "description": "Stores ticket booking information for a specific trip. Authenticated users can create bookings, admins can manage them."
+    },
+    "/financeRecords/{financeRecordId}": {
+      "schema": { "$ref": "#/entities/FinanceRecord" },
+      "description": "Stores financial records. Only admins should have write access."
+    }
   }
 }
