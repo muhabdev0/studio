@@ -5,8 +5,8 @@ import {
   CaretSortIcon,
   ChevronDownIcon,
   DotsHorizontalIcon,
-  PlusCircle,
 } from "@radix-ui/react-icons";
+import { PlusCircle } from "lucide-react";
 import {
   ColumnDef,
   ColumnFiltersState,
