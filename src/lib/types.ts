@@ -37,6 +37,7 @@ export interface Trip {
   ticketPrice: number;
   totalSeats: number;
   bookedSeats: number[];
+  status: "Scheduled" | "In Progress" | "Completed" | "Cancelled";
 }
 
 export interface Ticket {
@@ -46,6 +47,7 @@ export interface Ticket {
   seatNumber: number;
   price: number;
   bookingDate: string;
+  status: "Confirmed" | "Pending" | "Cancelled";
 }
 
 export interface FinanceEntry {
@@ -56,3 +58,5 @@ export interface FinanceEntry {
   date: string;
   description: string;
 }
+
+    

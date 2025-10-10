@@ -18,6 +18,7 @@ import {
   getSortedRowModel,
   useReactTable,
 } from "@tanstack/react-table";
+import { PlusCircle } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -47,6 +48,24 @@ import {
   CardContent,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import type { Trip } from "@/lib/types";
 
 const data: Ticket[] = [
   {
@@ -111,6 +130,69 @@ const data: Ticket[] = [
     price: 25.75,
     bookingDate: "2023-11-02T18:00:00Z",
     status: "Confirmed",
+  },
+];
+
+const trips: Trip[] = [
+  {
+    id: "TRIP-101",
+    from: "New York, NY",
+    to: "Boston, MA",
+    dateTime: "2023-11-15T08:00:00Z",
+    busId: "BUS-01",
+    driverId: "DRV-A",
+    status: "Scheduled",
+    ticketPrice: 45.5,
+    totalSeats: 50,
+    bookedSeats: [12, 13],
+  },
+  {
+    id: "TRIP-102",
+    from: "Los Angeles, CA",
+    to: "San Francisco, CA",
+    dateTime: "2023-11-16T10:00:00Z",
+    busId: "BUS-02",
+    driverId: "DRV-B",
+    status: "In Progress",
+    ticketPrice: 35.0,
+    totalSeats: 45,
+    bookedSeats: [5, 6],
+  },
+  {
+    id: "TRIP-103",
+    from: "Chicago, IL",
+    to: "Detroit, MI",
+    dateTime: "2023-11-14T09:30:00Z",
+    busId: "BUS-03",
+    driverId: "DRV-C",
+    status: "Completed",
+    ticketPrice: 60.0,
+    totalSeats: 55,
+    bookedSeats: [1],
+  },
+  {
+    id: "TRIP-104",
+    from: "Miami, FL",
+    to: "Orlando, FL",
+    dateTime: "2023-11-17T13:00:00Z",
+    busId: "BUS-04",
+    driverId: "DRV-D",
+    status: "Scheduled",
+    ticketPrice: 50.0,
+    totalSeats: 40,
+    bookedSeats: [22],
+  },
+  {
+    id: "TRIP-105",
+    from: "Denver, CO",
+    to: "Salt Lake City, UT",
+    dateTime: "2023-11-18T07:00:00Z",
+    busId: "BUS-05",
+    driverId: "DRV-E",
+    status: "Cancelled",
+    ticketPrice: 25.75,
+    totalSeats: 60,
+    bookedSeats: [18],
   },
 ];
 
@@ -234,6 +316,88 @@ export const columns: ColumnDef<Ticket>[] = [
   },
 ];
 
+function NewBookingDialog({ open, onOpenChange }: { open: boolean, onOpenChange: (open: boolean) => void }) {
+  const [selectedTripId, setSelectedTripId] = React.useState<string | undefined>();
+  
+  const selectedTrip = trips.find(t => t.id === selectedTripId);
+
+  const availableSeats = React.useMemo(() => {
+    if (!selectedTrip) return [];
+    const booked = selectedTrip.bookedSeats;
+    const allSeats = Array.from({ length: selectedTrip.totalSeats }, (_, i) => i + 1);
+    return allSeats.filter(seat => !booked.includes(seat));
+  }, [selectedTrip]);
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-[425px]">
+        <DialogHeader>
+          <DialogTitle>Create New Booking</DialogTitle>
+          <DialogDescription>
+            Book a new trip for a customer.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="grid gap-4 py-4">
+          <div className="grid grid-cols-4 items-center gap-4">
+            <Label htmlFor="customerName" className="text-right">
+              Customer Name
+            </Label>
+            <Input id="customerName" className="col-span-3" />
+          </div>
+          <div className="grid grid-cols-4 items-center gap-4">
+            <Label htmlFor="trip" className="text-right">
+              Trip
+            </Label>
+            <Select onValueChange={setSelectedTripId}>
+              <SelectTrigger className="col-span-3">
+                <SelectValue placeholder="Select a trip" />
+              </SelectTrigger>
+              <SelectContent>
+                {trips.filter(t => t.status === "Scheduled").map((trip) => (
+                  <SelectItem key={trip.id} value={trip.id}>
+                    {trip.from} to {trip.to} ({new Date(trip.dateTime).toLocaleDateString()})
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          {selectedTrip && (
+            <>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="seat" className="text-right">
+                  Seat
+                </Label>
+                <Select>
+                  <SelectTrigger className="col-span-3">
+                    <SelectValue placeholder="Select a seat" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {availableSeats.map(seat => (
+                      <SelectItem key={seat} value={String(seat)}>
+                        Seat {seat}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label className="text-right">Price</Label>
+                <div className="col-span-3 font-medium">
+                  {new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(selectedTrip.ticketPrice)}
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+        <DialogFooter>
+          <Button type="submit">Create Booking</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+
 export default function BookingsPage() {
   const [sorting, setSorting] = React.useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>(
@@ -242,6 +406,8 @@ export default function BookingsPage() {
   const [columnVisibility, setColumnVisibility] =
     React.useState<VisibilityState>({});
   const [rowSelection, setRowSelection] = React.useState({});
+  const [isNewBookingDialogOpen, setIsNewBookingDialogOpen] = React.useState(false);
+
 
   const table = useReactTable({
     data,
@@ -263,132 +429,144 @@ export default function BookingsPage() {
   });
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Ticket Bookings</CardTitle>
-        <CardDescription>
-          Here you can view and manage all ticket bookings.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <div className="w-full">
-          <div className="flex items-center py-4">
-            <Input
-              placeholder="Filter by customer name..."
-              value={
-                (table.getColumn("customerName")?.getFilterValue() as string) ??
-                ""
-              }
-              onChange={(event) =>
-                table
-                  .getColumn("customerName")
-                  ?.setFilterValue(event.target.value)
-              }
-              className="max-w-sm"
-            />
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" className="ml-auto">
-                  Columns <ChevronDownIcon className="ml-2 h-4 w-4" />
+    <>
+      <Card>
+        <CardHeader>
+            <div className="flex justify-between items-center">
+                <div>
+                    <CardTitle>Ticket Bookings</CardTitle>
+                    <CardDescription>
+                    Here you can view and manage all ticket bookings.
+                    </CardDescription>
+                </div>
+                <Button onClick={() => setIsNewBookingDialogOpen(true)}>
+                    <PlusCircle className="mr-2 h-4 w-4" /> New Booking
                 </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                {table
-                  .getAllColumns()
-                  .filter((column) => column.getCanHide())
-                  .map((column) => {
-                    return (
-                      <DropdownMenuCheckboxItem
-                        key={column.id}
-                        className="capitalize"
-                        checked={column.getIsVisible()}
-                        onCheckedChange={(value) =>
-                          column.toggleVisibility(!!value)
-                        }
-                      >
-                        {column.id}
-                      </DropdownMenuCheckboxItem>
-                    );
-                  })}
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-          <div className="rounded-md border">
-            <Table>
-              <TableHeader>
-                {table.getHeaderGroups().map((headerGroup) => (
-                  <TableRow key={headerGroup.id}>
-                    {headerGroup.headers.map((header) => {
+            </div>
+        </CardHeader>
+        <CardContent>
+          <div className="w-full">
+            <div className="flex items-center py-4">
+              <Input
+                placeholder="Filter by customer name..."
+                value={
+                  (table.getColumn("customerName")?.getFilterValue() as string) ??
+                  ""
+                }
+                onChange={(event) =>
+                  table
+                    .getColumn("customerName")
+                    ?.setFilterValue(event.target.value)
+                }
+                className="max-w-sm"
+              />
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" className="ml-auto">
+                    Columns <ChevronDownIcon className="ml-2 h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  {table
+                    .getAllColumns()
+                    .filter((column) => column.getCanHide())
+                    .map((column) => {
                       return (
-                        <TableHead key={header.id}>
-                          {header.isPlaceholder
-                            ? null
-                            : flexRender(
-                                header.column.columnDef.header,
-                                header.getContext()
-                              )}
-                        </TableHead>
+                        <DropdownMenuCheckboxItem
+                          key={column.id}
+                          className="capitalize"
+                          checked={column.getIsVisible()}
+                          onCheckedChange={(value) =>
+                            column.toggleVisibility(!!value)
+                          }
+                        >
+                          {column.id}
+                        </DropdownMenuCheckboxItem>
                       );
                     })}
-                  </TableRow>
-                ))}
-              </TableHeader>
-              <TableBody>
-                {table.getRowModel().rows?.length ? (
-                  table.getRowModel().rows.map((row) => (
-                    <TableRow
-                      key={row.id}
-                      data-state={row.getIsSelected() && "selected"}
-                    >
-                      {row.getVisibleCells().map((cell) => (
-                        <TableCell key={cell.id}>
-                          {flexRender(
-                            cell.column.columnDef.cell,
-                            cell.getContext()
-                          )}
-                        </TableCell>
-                      ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+            <div className="rounded-md border">
+              <Table>
+                <TableHeader>
+                  {table.getHeaderGroups().map((headerGroup) => (
+                    <TableRow key={headerGroup.id}>
+                      {headerGroup.headers.map((header) => {
+                        return (
+                          <TableHead key={header.id}>
+                            {header.isPlaceholder
+                              ? null
+                              : flexRender(
+                                  header.column.columnDef.header,
+                                  header.getContext()
+                                )}
+                          </TableHead>
+                        );
+                      })}
                     </TableRow>
-                  ))
-                ) : (
-                  <TableRow>
-                    <TableCell
-                      colSpan={columns.length}
-                      className="h-24 text-center"
-                    >
-                      No results.
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </div>
-          <div className="flex items-center justify-end space-x-2 py-4">
-            <div className="flex-1 text-sm text-muted-foreground">
-              {table.getFilteredSelectedRowModel().rows.length} of{" "}
-              {table.getFilteredRowModel().rows.length} row(s) selected.
+                  ))}
+                </TableHeader>
+                <TableBody>
+                  {table.getRowModel().rows?.length ? (
+                    table.getRowModel().rows.map((row) => (
+                      <TableRow
+                        key={row.id}
+                        data-state={row.getIsSelected() && "selected"}
+                      >
+                        {row.getVisibleCells().map((cell) => (
+                          <TableCell key={cell.id}>
+                            {flexRender(
+                              cell.column.columnDef.cell,
+                              cell.getContext()
+                            )}
+                          </TableCell>
+                        ))}
+                      </TableRow>
+                    ))
+                  ) : (
+                    <TableRow>
+                      <TableCell
+                        colSpan={columns.length}
+                        className="h-24 text-center"
+                      >
+                        No results.
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
             </div>
-            <div className="space-x-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => table.previousPage()}
-                disabled={!table.getCanPreviousPage()}
-              >
-                Previous
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => table.nextPage()}
-                disabled={!table.getCanNextPage()}
-              >
-                Next
-              </Button>
+            <div className="flex items-center justify-end space-x-2 py-4">
+              <div className="flex-1 text-sm text-muted-foreground">
+                {table.getFilteredSelectedRowModel().rows.length} of{" "}
+                {table.getFilteredRowModel().rows.length} row(s) selected.
+              </div>
+              <div className="space-x-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => table.previousPage()}
+                  disabled={!table.getCanPreviousPage()}
+                >
+                  Previous
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => table.nextPage()}
+                  disabled={!table.getCanNextPage()}
+                >
+                  Next
+                </Button>
+              </div>
             </div>
           </div>
-        </div>
-      </CardContent>
-    </Card>
+        </CardContent>
+      </Card>
+      <NewBookingDialog open={isNewBookingDialogOpen} onOpenChange={setIsNewBookingDialogOpen} />
+    </>
   );
 }
+
+    
