@@ -10,7 +10,7 @@
           "type": "string",
           "description": "Unique identifier for the bus."
         },
-        "nameNumber": {
+        "name": {
           "type": "string",
           "description": "Name or number of the bus."
         },
@@ -24,21 +24,22 @@
         },
         "maintenanceStatus": {
           "type": "string",
-          "description": "Current maintenance status of the bus (e.g., 'Operational', 'Under Maintenance')."
+          "description": "Current maintenance status of the bus (e.g., 'Operational', 'Under Maintenance').",
+          "enum": ["Operational", "Maintenance", "Out of Service"]
         },
         "assignedDriverId": {
           "type": "string",
-          "description": "Reference to the Driver assigned to this bus. (Relationship: Driver 1:N Bus)"
+          "description": "ID of the Driver assigned to this bus."
         },
         "imageUrl": {
           "type": "string",
-          "description": "URL of the bus image stored in Firebase Storage.",
+          "description": "URL of the bus image.",
           "format": "uri"
         }
       },
       "required": [
         "id",
-        "nameNumber",
+        "name",
         "plateNumber",
         "capacity",
         "maintenanceStatus"
@@ -60,7 +61,8 @@
         },
         "role": {
           "type": "string",
-          "description": "Role of the employee (e.g., 'Admin', 'Manager', 'Driver', 'Employee')."
+          "description": "Role of the employee (e.g., 'Admin', 'Manager', 'Driver', 'Employee').",
+          "enum": ["Admin", "Manager", "Driver", "Employee", "Mechanic"]
         },
         "contactInfo": {
           "type": "string",
@@ -72,7 +74,7 @@
         },
         "profilePhotoUrl": {
           "type": "string",
-          "description": "URL of the employee's profile photo stored in Firebase Storage.",
+          "description": "URL of the employee's profile photo.",
           "format": "uri"
         }
       },
@@ -94,45 +96,55 @@
           "type": "string",
           "description": "Unique identifier for the trip."
         },
-        "routeFrom": {
+        "from": {
           "type": "string",
           "description": "Starting location of the trip."
         },
-        "routeTo": {
+        "to": {
           "type": "string",
           "description": "Destination of the trip."
-        },
-        "assignedBusId": {
-          "type": "string",
-          "description": "Reference to the Bus assigned to this trip. (Relationship: Bus 1:N Trip)"
-        },
-        "assignedDriverId": {
-          "type": "string",
-          "description": "Reference to the Driver assigned to this trip. (Relationship: Driver 1:N Trip)"
         },
         "dateTime": {
           "type": "string",
           "description": "Date and time of the trip.",
           "format": "date-time"
         },
-        "ticketPrice": {
+        "price": {
           "type": "number",
           "description": "Price of a ticket for the trip."
         },
-        "availableSeats": {
-          "type": "number",
-          "description": "Number of seats available on the trip."
+        "driverId": {
+          "type": "string",
+          "description": "ID of the Driver assigned to this trip."
+        },
+        "busId": {
+            "type": "string",
+            "description": "ID of the Bus assigned to this trip."
+        },
+        "status": {
+            "type": "string",
+            "enum": ["Scheduled", "In Progress", "Completed", "Cancelled"]
+        },
+        "totalSeats": {
+            "type": "number"
+        },
+        "bookedSeats": {
+            "type": "array",
+            "items": {
+                "type": "number"
+            }
         }
       },
       "required": [
         "id",
-        "routeFrom",
-        "routeTo",
-        "assignedBusId",
-        "assignedDriverId",
+        "from",
+        "to",
         "dateTime",
-        "ticketPrice",
-        "availableSeats"
+        "price",
+        "driverId",
+        "busId",
+        "status",
+        "totalSeats"
       ]
     },
     "TicketBooking": {
@@ -147,7 +159,7 @@
         },
         "tripId": {
           "type": "string",
-          "description": "Reference to the Trip associated with this ticket booking. (Relationship: Trip 1:N TicketBooking)"
+          "description": "Reference to the Trip for this booking."
         },
         "customerName": {
           "type": "string",
@@ -158,8 +170,15 @@
           "description": "Seat number assigned to the customer."
         },
         "price": {
-          "type": "number",
-          "description": "Price paid for the ticket."
+            "type": "number"
+        },
+        "bookingDate": {
+            "type": "string",
+            "format": "date-time"
+        },
+        "status": {
+            "type": "string",
+            "enum": ["Confirmed", "Pending", "Cancelled"]
         }
       },
       "required": [
@@ -167,7 +186,9 @@
         "tripId",
         "customerName",
         "seatNumber",
-        "price"
+        "price",
+        "bookingDate",
+        "status"
       ]
     },
     "FinanceRecord": {
@@ -182,7 +203,8 @@
         },
         "type": {
           "type": "string",
-          "description": "Type of financial record ('income' or 'expense')."
+          "description": "Type of financial record ('income' or 'expense').",
+          "enum": ["Income", "Expense"]
         },
         "category": {
           "type": "string",
@@ -209,32 +231,11 @@
         "amount",
         "date"
       ]
-    },
-    "Driver": {
-      "$schema": "http://json-schema.org/draft-07/schema#",
-      "title": "Driver",
-      "type": "object",
-      "description": "Represents a driver.",
-      "properties": {
-        "id": {
-          "type": "string",
-          "description": "Unique identifier for the driver."
-        },
-        "employeeId": {
-          "type": "string",
-          "description": "Reference to the Employee record for this driver. (Relationship: Employee 1:1 Driver)"
-        }
-      },
-      "required": [
-        "id",
-        "employeeId"
-      ]
     }
   },
   "auth": {
     "providers": [
-      "password",
-      "anonymous"
+      "password"
     ]
   },
   "firestore": {
@@ -244,31 +245,9 @@
         "definition": {
           "entityName": "Employee",
           "schema": {
-            "$ref": "#/backend/entities/Employee"
+            "$ref": "#/entities/Employee"
           },
-          "description": "Stores employee profiles. Path-based ownership, where each employee can only access their profile.",
-          "params": [
-            {
-              "name": "employeeId",
-              "description": "The unique identifier for the employee."
-            }
-          ]
-        }
-      },
-      {
-        "path": "/drivers/{driverId}",
-        "definition": {
-          "entityName": "Driver",
-          "schema": {
-            "$ref": "#/backend/entities/Driver"
-          },
-          "description": "Stores driver profiles. Each driver document contains a reference to employeeId.",
-          "params": [
-            {
-              "name": "driverId",
-              "description": "The unique identifier for the driver."
-            }
-          ]
+          "description": "Stores employee profiles. Only admins should have write access."
         }
       },
       {
@@ -276,15 +255,9 @@
         "definition": {
           "entityName": "Bus",
           "schema": {
-            "$ref": "#/backend/entities/Bus"
+            "$ref": "#/entities/Bus"
           },
-          "description": "Stores bus information.  Admin/Manager roles will have access. Consider adding a 'members' map if bus-specific permissions are needed.",
-          "params": [
-            {
-              "name": "busId",
-              "description": "The unique identifier for the bus."
-            }
-          ]
+          "description": "Stores bus information. Only admins should have write access."
         }
       },
       {
@@ -292,15 +265,9 @@
         "definition": {
           "entityName": "Trip",
           "schema": {
-            "$ref": "#/backend/entities/Trip"
+            "$ref": "#/entities/Trip"
           },
-          "description": "Stores trip details.  Includes denormalized 'members' map for authorization independence. This map defines which users can manage or view ticket bookings for this trip. Authorization rules will check against the members map to determine access.",
-          "params": [
-            {
-              "name": "tripId",
-              "description": "The unique identifier for the trip."
-            }
-          ]
+          "description": "Stores trip details. Only admins should have write access."
         }
       },
       {
@@ -308,19 +275,9 @@
         "definition": {
           "entityName": "TicketBooking",
           "schema": {
-            "$ref": "#/backend/entities/TicketBooking"
+            "$ref": "#/entities/TicketBooking"
           },
-          "description": "Stores ticket booking information for a specific trip. Access is controlled by the 'members' map denormalized into the parent /trips/{tripId} document. The members map contains the UIDs of users who have authorization to manage or view these bookings.",
-          "params": [
-            {
-              "name": "tripId",
-              "description": "The unique identifier for the trip."
-            },
-            {
-              "name": "ticketBookingId",
-              "description": "The unique identifier for the ticket booking."
-            }
-          ]
+          "description": "Stores ticket booking information for a specific trip. Authenticated users can create bookings, admins can manage them."
         }
       },
       {
@@ -328,18 +285,11 @@
         "definition": {
           "entityName": "FinanceRecord",
           "schema": {
-            "$ref": "#/backend/entities/FinanceRecord"
+            "$ref": "#/entities/FinanceRecord"
           },
-          "description": "Stores financial records.  Admin/Manager roles will have access. This collection is flat and doesn't have a parent-child relationship.",
-          "params": [
-            {
-              "name": "financeRecordId",
-              "description": "The unique identifier for the financial record."
-            }
-          ]
+          "description": "Stores financial records. Only admins should have write access."
         }
       }
-    ],
-    "reasoning": "The Firestore structure is designed to support the SwiftRoute application's core features, focusing on security, scalability, and ease of debugging.  Authorization Independence is achieved through denormalization, eliminating the need for `get()` calls in security rules.  Structural Segregation ensures that each collection has a homogeneous security posture. Access Modeling follows consistent patterns for private, user-owned, and collaborative data. The key collections and their structures are designed to support efficient data retrieval and secure access control.\n\n**Authorization Independence & QAPs:**\n\n*   **Employees & Drivers:** Employee data is stored in `/employees/{employeeId}`. Driver data contains a reference to the employeeId in the `/drivers/{driverId}` collection. This is path-based ownership and is inherently secure.\n*   **Buses:** Bus data is stored in `/buses/{busId}`. There's a denormalized `assignedDriverId` field, but since a driver's permissions don't cascade to a bus, this is primarily for data consistency.\n*   **Trips:** Trip data is stored in `/trips/{tripId}`. Trip assignments are managed through denormalized `assignedBusId` and `assignedDriverId`.  While these are references, they don't create authorization dependencies; rules can validate that the user creating/modifying the trip has permissions to manage trips in general, without needing to check the bus or driver details.\n*   **TicketBookings:** Ticket bookings are stored in `/trips/{tripId}/ticketBookings/{ticketBookingId}`. Because bookings are owned by the trip, the trip must contain denormalized authorization data to achieve Authorization Independence. Specifically, trips should contain a `members` map to define who can view/modify bookings related to the trip.\n*   **FinanceRecords:** Finance records are stored in `/financeRecords/{financeRecordId}`. These records are globally accessible by admin-level employees.\n\n**Data Access and List Operations (QAPs):**\n\nThe data structure promotes secure list operations by segregating data based on access requirements. Path-based ownership for employees and drivers allows listing operations to be secured based on the user's ID. For buses and trips, global roles or membership maps within the collections can be utilized to filter list operations based on user roles or permissions. Because access control data is denormalized directly onto the records, filtering is secure.\n"
+    ]
   }
 }
