@@ -1,3 +1,40 @@
 {
-  "placeholderImages": []
+  "placeholderImages": [
+    {
+      "id": "employee1",
+      "description": "Profile photo of an employee",
+      "imageUrl": "https://picsum.photos/seed/employee1/100/100",
+      "imageHint": "person portrait"
+    },
+    {
+      "id": "employee2",
+      "description": "Profile photo of another employee",
+      "imageUrl": "https://picsum.photos/seed/employee2/100/100",
+      "imageHint": "person portrait"
+    },
+    {
+      "id": "employee3",
+      "description": "Profile photo of a third employee",
+      "imageUrl": "https://picsum.photos/seed/employee3/100/100",
+      "imageHint": "person portrait"
+    },
+    {
+      "id": "employee4",
+      "description": "Profile photo of a fourth employee",
+      "imageUrl": "https://picsum.photos/seed/employee4/100/100",
+      "imageHint": "person portrait"
+    },
+    {
+      "id": "employee5",
+      "description": "Profile photo of a fifth employee",
+      "imageUrl": "https://picsum.photos/seed/employee5/100/100",
+      "imageHint": "person portrait"
+    },
+    {
+      "id": "bus1",
+      "description": "Image of a bus",
+      "imageUrl": "https://picsum.photos/seed/bus1/600/400",
+      "imageHint": "bus"
+    }
+  ]
 }
