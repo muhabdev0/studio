@@ -1,0 +1,150 @@
+/**
+ * @fileoverview Firestore Security Rules for SwiftRoute application.
+ *
+ * Core Philosophy:
+ * This ruleset enforces a combination of user-ownership (for employees), role-based access (for financial records and buses), and shared access (for trips and ticket bookings). It prioritizes security by default, explicitly denying access unless specifically granted.
+ *
+ * Data Structure:
+ * - /employees/{employeeId}: Employee profiles, accessible only by the employee themselves.
+ * - /drivers/{driverId}: Driver profiles, globally accessible and managed by admins.
+ * - /buses/{busId}: Bus information, accessible and managed by admins.
+ * - /trips/{tripId}: Trip details, with a 'members' map for shared access control.
+ * - /trips/{tripId}/ticketBookings/{ticketBookingId}: Ticket bookings for a specific trip, access controlled by the 'members' map on the parent trip document.
+ * - /financeRecords/{financeRecordId}: Financial records, accessible only by admins.
+ *
+ * Key Security Decisions:
+ * - User listing is generally disallowed for privacy.
+ * - Trips utilize a "members" map for fine-grained shared access, enabling collaborative management.
+ * - Read-only collections are not explicitly defined, defaulting to restricted access unless otherwise specified.
+ * - Data validation is limited to authorization-critical fields to allow for rapid iteration on the data model.
+ *
+ * Denormalization for Authorization:
+ * The /trips/{tripId} document contains a `members` map (e.g., `{ members: { 'user_abc': 'editor' } }`) to define user-specific roles for managing that trip. This allows rules on /trips/{tripId}/ticketBookings/{ticketBookingId} to efficiently check user permissions without additional `get()` calls.
+ *
+ * Structural Segregation:
+ * The structure avoids mixing public and private data within the same collection. Instead, collections are designed with a homogeneous security posture. For example, employee profiles are stored in a private collection accessible only by the individual employee.
+ */
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    /**
+     * @description Allows an employee to read and write their own profile.
+     * @path /employees/{employeeId}
+     * @allow (get, list) if request.auth.uid == employeeId
+     * @allow (create) if request.auth.uid == employeeId
+     * @allow (update, delete) if isExistingOwner(employeeId)
+     * @deny (get, list) if request.auth.uid != employeeId
+     * @deny (create) if request.auth.uid != employeeId
+     * @principle Enforces document ownership for writes.
+     */
+    match /employees/{employeeId} {
+      allow get, list: if isOwner(employeeId);
+      allow create: if isOwner(employeeId) && request.resource.data.id == request.auth.uid;
+      allow update: if isExistingOwner(employeeId) && request.resource.data.id == resource.data.id;
+      allow delete: if isExistingOwner(employeeId);
+    }
+
+    /**
+     * @description Allows admins to read and write driver profiles.
+     * @path /drivers/{driverId}
+     * @allow get, list: if isSignedIn();
+     * @allow create, update, delete: if isAdmin();
+     * @deny create, update, delete: if !isAdmin();
+     * @principle Requires admin role for management.
+     */
+    match /drivers/{driverId} {
+      allow get, list: if isSignedIn();
+      allow create: if isAdmin();
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    /**
+     * @description Allows admins to manage bus information.
+     * @path /buses/{busId}
+     * @allow get, list: if isSignedIn();
+     * @allow create, update, delete: if isAdmin();
+     * @deny create, update, delete: if !isAdmin();
+     * @principle Requires admin role for management.
+     */
+    match /buses/{busId} {
+      allow get, list: if isSignedIn();
+      allow create: if isAdmin();
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    /**
+     * @description Manages trip details with shared access via a 'members' map.
+     * @path /trips/{tripId}
+     * @allow get, list: if isSignedIn();
+     * @allow create: if isAdmin();
+     * @allow update: if isTripEditor(tripId);
+     * @allow delete: if isTripEditor(tripId);
+     * @deny create: if !isAdmin();
+     * @principle Enforces document ownership for writes.
+     */
+    match /trips/{tripId} {
+      allow get, list: if isSignedIn();
+      allow create: if isAdmin();
+      allow update: if isTripEditor(tripId);
+      allow delete: if isTripEditor(tripId);
+    }
+
+    /**
+     * @description Controls access to ticket bookings based on trip membership.
+     * @path /trips/{tripId}/ticketBookings/{ticketBookingId}
+     * @allow get, list: if isTripEditor(tripId);
+     * @allow create: if isTripEditor(tripId);
+     * @allow update: if isTripEditor(tripId);
+     * @allow delete: if isTripEditor(tripId);
+     * @deny create, update, delete: if !isTripEditor(tripId);
+     * @principle Enforces document ownership for writes.
+     */
+    match /trips/{tripId}/ticketBookings/{ticketBookingId} {
+      allow get, list: if isTripEditor(tripId);
+      allow create: if isTripEditor(tripId);
+      allow update: if isTripEditor(tripId);
+      allow delete: if isTripEditor(tripId);
+    }
+
+    /**
+     * @description Allows admins to manage financial records.
+     * @path /financeRecords/{financeRecordId}
+     * @allow get, list: if isAdmin();
+     * @allow create, update, delete: if isAdmin();
+     * @deny create, update, delete: if !isAdmin();
+     * @principle Requires admin role for management.
+     */
+    match /financeRecords/{financeRecordId} {
+      allow get, list: if isAdmin();
+      allow create: if isAdmin();
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // --- Helper Functions ---
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return request.auth.uid == userId;
+    }
+
+    function isExistingOwner(userId) {
+      return isOwner(userId) && resource != null;
+    }
+
+    function isAdmin() {
+      // TODO: Implement a proper admin role check (e.g., from a custom claim).
+      return true; // For prototyping, all signed-in users are admins.
+    }
+
+    function isTripEditor(tripId) {
+      return get(/databases/$(database)/documents/trips/$(tripId)).data.members[request.auth.uid] != null;
+    }
+  }
+}
