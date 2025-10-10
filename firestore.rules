@@ -1,32 +1,3 @@
-/**
- * @fileoverview Firestore Security Rules for the Bus Management Application.
- *
- * Core Philosophy:
- * This ruleset implements a role-based access control model, with a focus on
- * securing access to sensitive data and operations.  The primary roles are
- * "Admin" and "User" (any authenticated user).  Admin roles are granted full
- * access to manage core data like employees, buses, trips, and financial
- * records.  Regular users (authenticated) can create ticket bookings, but
- * cannot manage other data.
- *
- * Data Structure:
- * - /employees/{employeeId}: Employee profiles, write access restricted to admins.
- * - /buses/{busId}: Bus information, write access restricted to admins.
- * - /trips/{tripId}: Trip details, write access restricted to admins.
- * - /trips/{tripId}/ticketBookings/{ticketBookingId}: Ticket bookings for a specific trip. Users can create ticket bookings.
- * - /financeRecords/{financeRecordId}: Financial records, write access restricted to admins.
- *
- * Key Security Decisions:
- * - Admin Role: The ruleset assumes an external mechanism (e.g., a Cloud Function)
- *   is responsible for assigning the "Admin" role to specific users. The
- *   presence of this role is determined by an `isAdmin()` helper function.
- * - No User Listing: Listing of users is explicitly denied to prevent information
- *   disclosure.
- * - Data Validation: Data validation is limited to authorization-critical fields.
- *   The rules prioritize flexibility for prototyping and rapid iteration.
- * - Public Read Restrictions: Read access is generally restricted to authenticated users.
- * - No write rule grants public access.
- */
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -42,135 +13,67 @@ service cloud.firestore {
      * @description Checks if the user has the 'Admin' role.
      */
     function isAdmin() {
-      return request.auth.token.role == 'Admin';
+      return isSignedIn() && request.auth.token.role == 'Admin';
     }
 
     /**
-     * @description Checks if the user is the owner of the resource.
-     * @param {string} userId - The user ID to compare against the request's auth UID.
+     * @description Checks if the user has the 'Admin' role or if the document exists.
      */
-    function isOwner(userId) {
-      return isSignedIn() && request.auth.uid == userId;
+    function isExistingAdmin() {
+        return isAdmin();
     }
 
     /**
-     * @description Checks if the user is the owner of the resource and it exists.
-     * @param {string} userId - The user ID to compare against the resource's data.
+     * @description Defines the valid roles for employees.
      */
-    function isExistingOwner(userId) {
-        return isOwner(userId) && resource != null;
+    function isValidEmployeeRole(role) {
+        return role in ["Admin", "Manager", "Driver", "Employee", "Mechanic"];
     }
 
-    /**
-     * @description Rules for employee profiles.
-     * @path /employees/{employeeId}
-     * @allow (create) - Only admins can create employee profiles.
-     * @deny (create) - Non-admins cannot create employee profiles.
-     * @allow (get) - Only admins can read employee profiles.
-     * @deny (get) - Non-admins cannot read employee profiles.
-     * @allow (list) - Only admins can list employee profiles.
-     * @deny (list) - Non-admins cannot list employee profiles.
-     * @allow (update) - Only admins can update employee profiles.
-     * @deny (update) - Non-admins cannot update employee profiles.
-     * @allow (delete) - Only admins can delete employee profiles.
-     * @deny (delete) - Non-admins cannot delete employee profiles.
-     * @principle Enforces role-based access control for employee data.
-     */
+    match /{path=**} {
+      allow read, write: if false;
+    }
+
     match /employees/{employeeId} {
       allow get: if isAdmin();
-      allow list: if isAdmin();
+      allow list: if false; // Listing employees is disabled for non-admins
+
       allow create: if isAdmin();
       allow update: if isAdmin();
       allow delete: if isAdmin();
     }
 
-    /**
-     * @description Rules for bus information.
-     * @path /buses/{busId}
-     * @allow (create) - Only admins can create bus information.
-     * @deny (create) - Non-admins cannot create bus information.
-     * @allow (get) - Any authenticated user can get bus information.
-     * @deny (get) - Users who are not signed in cannot get bus information.
-     * @allow (list) - Any authenticated user can list bus information.
-     * @deny (list) - Users who are not signed in cannot list bus information.
-     * @allow (update) - Only admins can update bus information.
-     * @deny (update) - Non-admins cannot update bus information.
-     * @allow (delete) - Only admins can delete bus information.
-     * @deny (delete) - Non-admins cannot delete bus information.
-     * @principle Enforces role-based access control for bus data.
-     */
     match /buses/{busId} {
-      allow get: if isSignedIn();
-      allow list: if isSignedIn();
+      allow get: if isAdmin();
+      allow list: if isAdmin();
+
       allow create: if isAdmin();
       allow update: if isAdmin();
       allow delete: if isAdmin();
     }
 
-    /**
-     * @description Rules for trip details.
-     * @path /trips/{tripId}
-     * @allow (create) - Only admins can create trip details.
-     * @deny (create) - Non-admins cannot create trip details.
-     * @allow (get) - Any authenticated user can get trip details.
-     * @deny (get) - Users who are not signed in cannot get trip details.
-     * @allow (list) - Any authenticated user can list trip details.
-     * @deny (list) - Users who are not signed in cannot list trip details.
-     * @allow (update) - Only admins can update trip details.
-     * @deny (update) - Non-admins cannot update trip details.
-     * @allow (delete) - Only admins can delete trip details.
-     * @deny (delete) - Non-admins cannot delete trip details.
-     * @principle Enforces role-based access control for trip data.
-     */
     match /trips/{tripId} {
-      allow get: if isSignedIn();
-      allow list: if isSignedIn();
+      allow get: if isAdmin();
+      allow list: if isAdmin();
+
       allow create: if isAdmin();
       allow update: if isAdmin();
       allow delete: if isAdmin();
-
-      /**
-       * @description Rules for ticket bookings for a specific trip.
-       * @path /trips/{tripId}/ticketBookings/{ticketBookingId}
-       * @allow (create) - Any authenticated user can create a ticket booking.
-       * @deny (create) - Users who are not signed in cannot create a ticket booking.
-       * @allow (get) - Any authenticated user can get a ticket booking.
-       * @deny (get) - Users who are not signed in cannot get a ticket booking.
-       * @allow (list) - Any authenticated user can list ticket bookings.
-       * @deny (list) - Users who are not signed in cannot list ticket bookings.
-       * @allow (update) - Only admins can update ticket bookings.
-       * @deny (update) - Non-admins cannot update ticket bookings.
-       * @allow (delete) - Only admins can delete ticket bookings.
-       * @deny (delete) - Non-admins cannot delete ticket bookings.
-       * @principle Authenticated users can create ticket bookings; admins can manage them.
-       */
-      match /ticketBookings/{ticketBookingId} {
-        allow get: if isSignedIn();
-        allow list: if isSignedIn();
-        allow create: if isSignedIn();
-        allow update: if isAdmin();
-        allow delete: if isAdmin();
-      }
     }
 
-    /**
-     * @description Rules for financial records.
-     * @path /financeRecords/{financeRecordId}
-     * @allow (create) - Only admins can create financial records.
-     * @deny (create) - Non-admins cannot create financial records.
-     * @allow (get) - Only admins can get financial records.
-     * @deny (get) - Non-admins cannot get financial records.
-     * @allow (list) - Only admins can list financial records.
-     * @deny (list) - Non-admins cannot list financial records.
-     * @allow (update) - Only admins can update financial records.
-     * @deny (update) - Non-admins cannot update financial records.
-     * @allow (delete) - Only admins can delete financial records.
-     * @deny (delete) - Non-admins cannot delete financial records.
-     * @principle Enforces role-based access control for financial data.
-     */
+    match /trips/{tripId}/ticketBookings/{ticketBookingId} {
+      allow get: if isSignedIn();
+      allow list: if false;
+
+      allow create: if isSignedIn();
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
     match /financeRecords/{financeRecordId} {
       allow get: if isAdmin();
       allow list: if isAdmin();
+
       allow create: if isAdmin();
       allow update: if isAdmin();
       allow delete: if isAdmin();
