@@ -50,8 +50,26 @@ import {
 } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import type { Employee, UserRole } from "@/lib/types";
-import { useFirestore, useCollection, useMemoFirebase } from "@/firebase";
+import { useFirestore, useCollection, useMemoFirebase, addDocumentNonBlocking } from "@/firebase";
+
+const userRoles: UserRole[] = ["Admin", "Manager", "Driver", "Employee", "Mechanic"];
 
 const getRoleBadgeVariant = (role: UserRole) => {
     switch(role) {
@@ -61,6 +79,94 @@ const getRoleBadgeVariant = (role: UserRole) => {
         default: return "outline";
     }
 }
+
+function NewEmployeeDialog({
+  open,
+  onOpenChange,
+  onEmployeeCreated,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onEmployeeCreated: (employee: Omit<Employee, "id">) => void;
+}) {
+  const [fullName, setFullName] = React.useState("");
+  const [role, setRole] = React.useState<UserRole>("Employee");
+  const [contactInfo, setContactInfo] = React.useState("");
+  const [salary, setSalary] = React.useState<number>(0);
+
+  const handleCreateEmployee = () => {
+    if (!fullName || !role || !contactInfo || salary <= 0) return;
+
+    const newEmployee: Omit<Employee, "id"> = {
+      fullName,
+      role,
+      contactInfo,
+      salary,
+      profilePhotoUrl: `https://picsum.photos/seed/${fullName}/100/100`
+    };
+    onEmployeeCreated(newEmployee);
+    onOpenChange(false);
+    // Reset form
+    setFullName("");
+    setRole("Employee");
+    setContactInfo("");
+    setSalary(0);
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-[425px]">
+        <DialogHeader>
+          <DialogTitle>Add New Employee</DialogTitle>
+          <DialogDescription>
+            Enter the details for the new employee.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="grid gap-4 py-4">
+          <div className="grid grid-cols-4 items-center gap-4">
+            <Label htmlFor="fullName" className="text-right">
+              Full Name
+            </Label>
+            <Input id="fullName" value={fullName} onChange={e => setFullName(e.target.value)} className="col-span-3" />
+          </div>
+          <div className="grid grid-cols-4 items-center gap-4">
+            <Label htmlFor="role" className="text-right">
+              Role
+            </Label>
+            <Select onValueChange={(value) => setRole(value as UserRole)} value={role}>
+              <SelectTrigger className="col-span-3">
+                <SelectValue placeholder="Select a role" />
+              </SelectTrigger>
+              <SelectContent>
+                {userRoles.map((role) => (
+                  <SelectItem key={role} value={role}>
+                    {role}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="grid grid-cols-4 items-center gap-4">
+            <Label htmlFor="contactInfo" className="text-right">
+              Contact Info
+            </Label>
+            <Input id="contactInfo" value={contactInfo} onChange={e => setContactInfo(e.target.value)} className="col-span-3" />
+          </div>
+          <div className="grid grid-cols-4 items-center gap-4">
+            <Label htmlFor="salary" className="text-right">
+              Salary
+            </Label>
+            <Input id="salary" type="number" value={salary} onChange={e => setSalary(Number(e.target.value))} className="col-span-3" />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button type="submit" onClick={handleCreateEmployee}>Create Employee</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 
 export const columns: ColumnDef<Employee>[] = [
   {
@@ -183,6 +289,7 @@ export default function EmployeesPage() {
   const [columnVisibility, setColumnVisibility] =
     React.useState<VisibilityState>({});
   const [rowSelection, setRowSelection] = React.useState({});
+  const [isNewEmployeeDialogOpen, setIsNewEmployeeDialogOpen] = React.useState(false);
 
   const table = useReactTable({
     data: employeesData ?? [],
@@ -203,145 +310,160 @@ export default function EmployeesPage() {
     },
   });
 
+  const handleEmployeeCreated = (newEmployee: Omit<Employee, "id">) => {
+    const employeesCollection = collection(firestore, 'employees');
+    addDocumentNonBlocking(employeesCollection, newEmployee);
+  };
+
+
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex justify-between items-center">
-            <div>
-                <CardTitle>Employee Management</CardTitle>
-                <CardDescription>
-                Here you can add, edit, and manage all employee profiles.
-                </CardDescription>
-            </div>
-             <Button>
-                <PlusCircle className="mr-2 h-4 w-4" /> Add New Employee
-            </Button>
-        </div>
-      </CardHeader>
-      <CardContent>
-        <div className="w-full">
-          <div className="flex items-center py-4">
-            <Input
-              placeholder="Filter by name..."
-              value={
-                (table.getColumn("fullName")?.getFilterValue() as string) ?? ""
-              }
-              onChange={(event) =>
-                table
-                  .getColumn("fullName")
-                  ?.setFilterValue(event.target.value)
-              }
-              className="max-w-sm"
-            />
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" className="ml-auto">
-                  Columns <ChevronDownIcon className="ml-2 h-4 w-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                {table
-                  .getAllColumns()
-                  .filter((column) => column.getCanHide())
-                  .map((column) => {
-                    return (
-                      <DropdownMenuCheckboxItem
-                        key={column.id}
-                        className="capitalize"
-                        checked={column.getIsVisible()}
-                        onCheckedChange={(value) =>
-                          column.toggleVisibility(!!value)
-                        }
-                      >
-                        {column.id === 'fullName' ? 'Name' : column.id.replace(/([A-Z])/g, ' $1')}
-                      </DropdownMenuCheckboxItem>
-                    );
-                  })}
-              </DropdownMenuContent>
-            </DropdownMenu>
+    <>
+      <Card>
+        <CardHeader>
+          <div className="flex justify-between items-center">
+              <div>
+                  <CardTitle>Employee Management</CardTitle>
+                  <CardDescription>
+                  Here you can add, edit, and manage all employee profiles.
+                  </CardDescription>
+              </div>
+              <Button onClick={() => setIsNewEmployeeDialogOpen(true)}>
+                  <PlusCircle className="mr-2 h-4 w-4" /> Add New Employee
+              </Button>
           </div>
-          <div className="rounded-md border">
-            <Table>
-              <TableHeader>
-                {table.getHeaderGroups().map((headerGroup) => (
-                  <TableRow key={headerGroup.id}>
-                    {headerGroup.headers.map((header) => {
+        </CardHeader>
+        <CardContent>
+          <div className="w-full">
+            <div className="flex items-center py-4">
+              <Input
+                placeholder="Filter by name..."
+                value={
+                  (table.getColumn("fullName")?.getFilterValue() as string) ?? ""
+                }
+                onChange={(event) =>
+                  table
+                    .getColumn("fullName")
+                    ?.setFilterValue(event.target.value)
+                }
+                className="max-w-sm"
+              />
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" className="ml-auto">
+                    Columns <ChevronDownIcon className="ml-2 h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  {table
+                    .getAllColumns()
+                    .filter((column) => column.getCanHide())
+                    .map((column) => {
                       return (
-                        <TableHead key={header.id}>
-                          {header.isPlaceholder
-                            ? null
-                            : flexRender(
-                                header.column.columnDef.header,
-                                header.getContext()
-                              )}
-                        </TableHead>
+                        <DropdownMenuCheckboxItem
+                          key={column.id}
+                          className="capitalize"
+                          checked={column.getIsVisible()}
+                          onCheckedChange={(value) =>
+                            column.toggleVisibility(!!value)
+                          }
+                        >
+                          {column.id === 'fullName' ? 'Name' : column.id.replace(/([A-Z])/g, ' $1')}
+                        </DropdownMenuCheckboxItem>
                       );
                     })}
-                  </TableRow>
-                ))}
-              </TableHeader>
-              <TableBody>
-                {isLoading ? (
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+            <div className="rounded-md border">
+              <Table>
+                <TableHeader>
+                  {table.getHeaderGroups().map((headerGroup) => (
+                    <TableRow key={headerGroup.id}>
+                      {headerGroup.headers.map((header) => {
+                        return (
+                          <TableHead key={header.id}>
+                            {header.isPlaceholder
+                              ? null
+                              : flexRender(
+                                  header.column.columnDef.header,
+                                  header.getContext()
+                                )}
+                          </TableHead>
+                        );
+                      })}
+                    </TableRow>
+                  ))}
+                </TableHeader>
+                <TableBody>
+                  {isLoading ? (
+                      <TableRow>
+                          <TableCell colSpan={columns.length} className="h-24 text-center">
+                              Loading...
+                          </TableCell>
+                      </TableRow>
+                  ) : table.getRowModel().rows?.length ? (
+                    table.getRowModel().rows.map((row) => (
+                      <TableRow
+                        key={row.id}
+                        data-state={row.getIsSelected() && "selected"}
+                      >
+                        {row.getVisibleCells().map((cell) => (
+                          <TableCell key={cell.id}>
+                            {flexRender(
+                              cell.column.columnDef.cell,
+                              cell.getContext()
+                            )}
+                          </TableCell>
+                        ))}
+                      </TableRow>
+                    ))
+                  ) : (
                     <TableRow>
-                        <TableCell colSpan={columns.length} className="h-24 text-center">
-                            Loading...
-                        </TableCell>
+                      <TableCell
+                        colSpan={columns.length}
+                        className="h-24 text-center"
+                      >
+                        No results.
+                      </TableCell>
                     </TableRow>
-                ) : table.getRowModel().rows?.length ? (
-                  table.getRowModel().rows.map((row) => (
-                    <TableRow
-                      key={row.id}
-                      data-state={row.getIsSelected() && "selected"}
-                    >
-                      {row.getVisibleCells().map((cell) => (
-                        <TableCell key={cell.id}>
-                          {flexRender(
-                            cell.column.columnDef.cell,
-                            cell.getContext()
-                          )}
-                        </TableCell>
-                      ))}
-                    </TableRow>
-                  ))
-                ) : (
-                  <TableRow>
-                    <TableCell
-                      colSpan={columns.length}
-                      className="h-24 text-center"
-                    >
-                      No results.
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </div>
-          <div className="flex items-center justify-end space-x-2 py-4">
-            <div className="flex-1 text-sm text-muted-foreground">
-              {table.getFilteredSelectedRowModel().rows.length} of{" "}
-              {table.getFilteredRowModel().rows.length} row(s) selected.
+                  )}
+                </TableBody>
+              </Table>
             </div>
-            <div className="space-x-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => table.previousPage()}
-                disabled={!table.getCanPreviousPage()}
-              >
-                Previous
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => table.nextPage()}
-                disabled={!table.getCanNextPage()}
-              >
-                Next
-              </Button>
+            <div className="flex items-center justify-end space-x-2 py-4">
+              <div className="flex-1 text-sm text-muted-foreground">
+                {table.getFilteredSelectedRowModel().rows.length} of{" "}
+                {table.getFilteredRowModel().rows.length} row(s) selected.
+              </div>
+              <div className="space-x-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => table.previousPage()}
+                  disabled={!table.getCanPreviousPage()}
+                >
+                  Previous
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => table.nextPage()}
+                  disabled={!table.getCanNextPage()}
+                >
+                  Next
+                </Button>
+              </div>
             </div>
           </div>
-        </div>
-      </CardContent>
-    </Card>
+        </CardContent>
+      </Card>
+      <NewEmployeeDialog 
+        open={isNewEmployeeDialogOpen}
+        onOpenChange={setIsNewEmployeeDialogOpen}
+        onEmployeeCreated={handleEmployeeCreated}
+      />
+    </>
   );
 }
+
+    
