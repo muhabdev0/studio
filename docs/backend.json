@@ -25,7 +25,11 @@
         "maintenanceStatus": {
           "type": "string",
           "description": "Current maintenance status of the bus (e.g., 'Operational', 'Under Maintenance').",
-          "enum": ["Operational", "Maintenance", "Out of Service"]
+          "enum": [
+            "Operational",
+            "Maintenance",
+            "Out of Service"
+          ]
         },
         "assignedDriverId": {
           "type": "string",
@@ -62,7 +66,13 @@
         "role": {
           "type": "string",
           "description": "Role of the employee (e.g., 'Admin', 'Manager', 'Driver', 'Employee').",
-          "enum": ["Admin", "Manager", "Driver", "Employee", "Mechanic"]
+          "enum": [
+            "Admin",
+            "Manager",
+            "Driver",
+            "Employee",
+            "Mechanic"
+          ]
         },
         "contactInfo": {
           "type": "string",
@@ -118,21 +128,26 @@
           "description": "ID of the Driver assigned to this trip."
         },
         "busId": {
-            "type": "string",
-            "description": "ID of the Bus assigned to this trip."
+          "type": "string",
+          "description": "ID of the Bus assigned to this trip."
         },
         "status": {
-            "type": "string",
-            "enum": ["Scheduled", "In Progress", "Completed", "Cancelled"]
+          "type": "string",
+          "enum": [
+            "Scheduled",
+            "In Progress",
+            "Completed",
+            "Cancelled"
+          ]
         },
         "totalSeats": {
-            "type": "number"
+          "type": "number"
         },
         "bookedSeats": {
-            "type": "array",
-            "items": {
-                "type": "number"
-            }
+          "type": "array",
+          "items": {
+            "type": "number"
+          }
         }
       },
       "required": [
@@ -170,15 +185,19 @@
           "description": "Seat number assigned to the customer."
         },
         "price": {
-            "type": "number"
+          "type": "number"
         },
         "bookingDate": {
-            "type": "string",
-            "format": "date-time"
+          "type": "string",
+          "format": "date-time"
         },
         "status": {
-            "type": "string",
-            "enum": ["Confirmed", "Pending", "Cancelled"]
+          "type": "string",
+          "enum": [
+            "Confirmed",
+            "Pending",
+            "Cancelled"
+          ]
         }
       },
       "required": [
@@ -204,7 +223,10 @@
         "type": {
           "type": "string",
           "description": "Type of financial record ('income' or 'expense').",
-          "enum": ["Income", "Expense"]
+          "enum": [
+            "Income",
+            "Expense"
+          ]
         },
         "category": {
           "type": "string",
@@ -240,24 +262,54 @@
   },
   "firestore": {
     "/employees/{employeeId}": {
-      "schema": { "$ref": "#/entities/Employee" },
-      "description": "Stores employee profiles. Only admins should have write access."
+      "schema": {
+        "$ref": "#/entities/Employee"
+      },
+      "description": "Stores employee profiles.",
+      "rules": {
+        "read": "request.auth != null",
+        "write": "request.auth != null"
+      }
     },
     "/buses/{busId}": {
-      "schema": { "$ref": "#/entities/Bus" },
-      "description": "Stores bus information. Only admins should have write access."
+      "schema": {
+        "$ref": "#/entities/Bus"
+      },
+      "description": "Stores bus information.",
+      "rules": {
+        "read": "request.auth != null",
+        "write": "request.auth != null"
+      }
     },
     "/trips/{tripId}": {
-      "schema": { "$ref": "#/entities/Trip" },
-      "description": "Stores trip details. Only admins should have write access."
+      "schema": {
+        "$ref": "#/entities/Trip"
+      },
+      "description": "Stores trip details.",
+      "rules": {
+        "read": "request.auth != null",
+        "write": "request.auth != null"
+      }
     },
-    "/trips/{tripId}/ticketBookings/{ticketBookingId}": {
-      "schema": { "$ref": "#/entities/TicketBooking" },
-      "description": "Stores ticket booking information for a specific trip. Authenticated users can create bookings, admins can manage them."
+    "/ticketBookings/{ticketBookingId}": {
+      "schema": {
+        "$ref": "#/entities/TicketBooking"
+      },
+      "description": "Stores ticket booking information for a specific trip.",
+      "rules": {
+        "read": "request.auth != null",
+        "write": "request.auth != null"
+      }
     },
     "/financeRecords/{financeRecordId}": {
-      "schema": { "$ref": "#/entities/FinanceRecord" },
-      "description": "Stores financial records. Only admins should have write access."
+      "schema": {
+        "$ref": "#/entities/FinanceRecord"
+      },
+      "description": "Stores financial records.",
+      "rules": {
+        "read": "request.auth != null",
+        "write": "request.auth != null"
+      }
     }
   }
 }
