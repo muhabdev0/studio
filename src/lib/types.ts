@@ -46,6 +46,7 @@ export interface TicketBooking {
   id: string;
   tripId: string;
   customerName: string;
+  idNumber: string;
   seatNumber: number;
   price: number;
   bookingDate: Timestamp;

@@ -19,7 +19,7 @@ import {
   useReactTable,
 } from "@tanstack/react-table";
 import { PlusCircle } from "lucide-react";
-import { collection, Timestamp, doc } from "firebase/firestore";
+import { collection, Timestamp, doc, updateDoc } from "firebase/firestore";
 
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -106,6 +106,10 @@ export const columns: ColumnDef<TicketBooking>[] = [
     },
     cell: ({ row }) => <div>{row.getValue("customerName")}</div>,
   },
+    {
+    accessorKey: "idNumber",
+    header: "ID Number",
+  },
   {
     accessorKey: "tripId",
     header: "Trip ID",
@@ -191,6 +195,7 @@ function NewBookingDialog({
     onBookingCreated: (booking: Omit<TicketBooking, "id">) => void
 }) {
   const [customerName, setCustomerName] = React.useState("");
+  const [idNumber, setIdNumber] = React.useState("");
   const [selectedTripId, setSelectedTripId] = React.useState<string | undefined>();
   const [selectedSeat, setSelectedSeat] = React.useState<number | undefined>();
   
@@ -198,17 +203,18 @@ function NewBookingDialog({
 
   const availableSeats = React.useMemo(() => {
     if (!selectedTrip) return [];
-    const booked = selectedTrip.bookedSeats;
+    const booked = selectedTrip.bookedSeats || [];
     const allSeats = Array.from({ length: selectedTrip.totalSeats }, (_, i) => i + 1);
     return allSeats.filter(seat => !booked.includes(seat));
   }, [selectedTrip]);
 
   const handleCreateBooking = () => {
-    if (!customerName || !selectedTrip || !selectedSeat) return;
+    if (!customerName || !idNumber || !selectedTrip || !selectedSeat) return;
 
     const newBooking: Omit<TicketBooking, "id"> = {
         tripId: selectedTrip.id,
         customerName,
+        idNumber,
         seatNumber: selectedSeat,
         price: selectedTrip.ticketPrice,
         bookingDate: Timestamp.now(),
@@ -218,6 +224,7 @@ function NewBookingDialog({
     onOpenChange(false);
     // Reset form
     setCustomerName("");
+    setIdNumber("");
     setSelectedTripId(undefined);
     setSelectedSeat(undefined);
   };
@@ -240,6 +247,12 @@ function NewBookingDialog({
             <Input id="customerName" value={customerName} onChange={e => setCustomerName(e.target.value)} className="col-span-3" />
           </div>
           <div className="grid grid-cols-4 items-center gap-4">
+            <Label htmlFor="idNumber" className="text-right">
+              ID Number
+            </Label>
+            <Input id="idNumber" value={idNumber} onChange={e => setIdNumber(e.target.value)} className="col-span-3" />
+          </div>
+          <div className="grid grid-cols-4 items-center gap-4">
             <Label htmlFor="trip" className="text-right">
               Trip
             </Label>
@@ -258,6 +271,12 @@ function NewBookingDialog({
           </div>
           {selectedTrip && (
             <>
+               <div className="grid grid-cols-4 items-center gap-4">
+                <Label className="text-right">Trip Date</Label>
+                <div className="col-span-3 font-medium">
+                  {selectedTrip.dateTime.toDate().toLocaleString()}
+                </div>
+              </div>
               <div className="grid grid-cols-4 items-center gap-4">
                 <Label htmlFor="seat" className="text-right">
                   Seat
@@ -333,7 +352,17 @@ export default function BookingsPage() {
 
   const handleBookingCreated = (newBooking: Omit<TicketBooking, "id">) => {
     const bookingsCollection = collection(firestore, 'ticketBookings');
-    addDocumentNonBlocking(bookingsCollection, newBooking);
+    addDocumentNonBlocking(bookingsCollection, newBooking)
+      .then(docRef => {
+        if (docRef) {
+          const tripRef = doc(firestore, 'trips', newBooking.tripId);
+          const trip = tripsData?.find(t => t.id === newBooking.tripId);
+          if (trip) {
+            const updatedBookedSeats = [...(trip.bookedSeats || []), newBooking.seatNumber];
+            updateDoc(tripRef, { bookedSeats: updatedBookedSeats });
+          }
+        }
+      });
   }
 
   const isLoading = isLoadingBookings || isLoadingTrips;
