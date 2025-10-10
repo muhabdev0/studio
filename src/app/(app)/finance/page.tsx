@@ -19,6 +19,7 @@ import {
   getSortedRowModel,
   useReactTable,
 } from "@tanstack/react-table";
+import { collection, Timestamp } from "firebase/firestore";
 
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -48,21 +49,10 @@ import {
   CardContent,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import type { FinanceEntry } from "@/lib/types";
+import type { FinanceRecord } from "@/lib/types";
+import { useFirestore, useCollection, useMemoFirebase } from "@/firebase";
 
-const data: FinanceEntry[] = [
-    { id: "FIN-001", type: "Income", category: "Ticket Sale", amount: 45.50, date: "2023-10-26T10:00:00Z", description: "Ticket for TRIP-101" },
-    { id: "FIN-002", type: "Expense", category: "Salary", amount: 2000.00, date: "2023-10-31T00:00:00Z", description: "October salary for DRV-A" },
-    { id: "FIN-003", type: "Income", category: "Ticket Sale", amount: 35.00, date: "2023-10-25T14:30:00Z", description: "Ticket for TRIP-102" },
-    { id: "FIN-004", type: "Expense", category: "Maintenance", amount: 500.00, date: "2023-10-28T00:00:00Z", description: "Repair for BUS-03" },
-    { id: "FIN-005", type: "Income", category: "Ticket Sale", amount: 60.00, date: "2023-10-24T09:00:00Z", description: "Ticket for TRIP-103" },
-    { id: "FIN-006", type: "Expense", category: "Rent", amount: 1500.00, date: "2023-11-01T00:00:00Z", description: "Office rent for November" },
-    { id: "FIN-007", type: "Income", category: "Ticket Sale", amount: 50.00, date: "2023-11-01T12:00:00Z", description: "Ticket for TRIP-104" },
-    { id: "FIN-008", type: "Expense", category: "Other", amount: 75.00, date: "2023-11-02T00:00:00Z", description: "Office supplies" },
-];
-
-
-const getCategoryBadgeVariant = (category: FinanceEntry["category"]) => {
+const getCategoryBadgeVariant = (category: FinanceRecord["category"]) => {
     switch(category) {
         case "Ticket Sale": return "default";
         case "Salary": return "destructive";
@@ -72,8 +62,7 @@ const getCategoryBadgeVariant = (category: FinanceEntry["category"]) => {
     }
 }
 
-
-export const columns: ColumnDef<FinanceEntry>[] = [
+export const columns: ColumnDef<FinanceRecord>[] = [
   {
     id: "select",
     header: ({ table }) => (
@@ -112,7 +101,7 @@ export const columns: ColumnDef<FinanceEntry>[] = [
     accessorKey: "category",
     header: "Category",
     cell: ({ row }) => {
-        const category = row.getValue("category") as FinanceEntry["category"];
+        const category = row.getValue("category") as FinanceRecord["category"];
         return <Badge variant={getCategoryBadgeVariant(category)}>{category}</Badge>
     }
   },
@@ -130,7 +119,8 @@ export const columns: ColumnDef<FinanceEntry>[] = [
       );
     },
     cell: ({ row }) => {
-      return <div>{new Date(row.getValue("date")).toLocaleDateString()}</div>;
+      const timestamp = row.getValue("date") as Timestamp;
+      return <div>{timestamp.toDate().toLocaleDateString()}</div>;
     },
   },
   {
@@ -184,6 +174,10 @@ export const columns: ColumnDef<FinanceEntry>[] = [
 ];
 
 export default function FinancePage() {
+  const firestore = useFirestore();
+  const financeQuery = useMemoFirebase(() => collection(firestore, "financeRecords"), [firestore]);
+  const { data, isLoading } = useCollection<FinanceRecord>(financeQuery);
+
   const [sorting, setSorting] = React.useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>(
     []
@@ -193,7 +187,7 @@ export default function FinancePage() {
   const [rowSelection, setRowSelection] = React.useState({});
 
   const table = useReactTable({
-    data,
+    data: data ?? [],
     columns,
     onSortingChange: setSorting,
     onColumnFiltersChange: setColumnFilters,
@@ -289,7 +283,13 @@ export default function FinancePage() {
                 ))}
               </TableHeader>
               <TableBody>
-                {table.getRowModel().rows?.length ? (
+                {isLoading ? (
+                    <TableRow>
+                        <TableCell colSpan={columns.length} className="h-24 text-center">
+                            Loading...
+                        </TableCell>
+                    </TableRow>
+                ) : table.getRowModel().rows?.length ? (
                   table.getRowModel().rows.map((row) => (
                     <TableRow
                       key={row.id}

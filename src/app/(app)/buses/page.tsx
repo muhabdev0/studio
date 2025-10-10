@@ -3,6 +3,7 @@
 import * as React from "react";
 import Image from "next/image";
 import { PlusCircle, MoreVertical, Pencil, Trash2 } from "lucide-react";
+import { collection, doc } from "firebase/firestore";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -24,55 +25,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { PlaceHolderImages } from "@/lib/placeholder-images";
 import type { Bus } from "@/lib/types";
-
-const busesData: Bus[] = [
-  {
-    id: "BUS-01",
-    name: "City Cruiser 1",
-    plateNumber: "NYC-1234",
-    capacity: 50,
-    maintenanceStatus: "Operational",
-    assignedDriverId: "DRV-A",
-    imageUrl: PlaceHolderImages.find(img => img.id === 'bus1')?.imageUrl,
-  },
-  {
-    id: "BUS-02",
-    name: "MetroLink 5",
-    plateNumber: "LA-5678",
-    capacity: 45,
-    maintenanceStatus: "Operational",
-    assignedDriverId: "DRV-B",
-    imageUrl: "https://picsum.photos/seed/bus2/600/400"
-  },
-  {
-    id: "BUS-03",
-    name: "Downtown Express",
-    plateNumber: "CHI-9101",
-    capacity: 55,
-    maintenanceStatus: "Maintenance",
-    assignedDriverId: "DRV-C",
-    imageUrl: "https://picsum.photos/seed/bus3/600/400"
-  },
-  {
-    id: "BUS-04",
-    name: "Sunshine Shuttle",
-    plateNumber: "MIA-1121",
-    capacity: 40,
-    maintenanceStatus: "Operational",
-    assignedDriverId: "DRV-D",
-    imageUrl: "https://picsum.photos/seed/bus4/600/400"
-  },
-  {
-    id: "BUS-05",
-    name: "Mountain Mover",
-    plateNumber: "DEN-3141",
-    capacity: 60,
-    maintenanceStatus: "Out of Service",
-    assignedDriverId: "DRV-E",
-    imageUrl: "https://picsum.photos/seed/bus5/600/400"
-  },
-];
-
+import { useFirestore, useCollection, useMemoFirebase, deleteDocumentNonBlocking } from "@/firebase";
 
 const StatusBadge = ({ status }: { status: Bus["maintenanceStatus"] }) => {
   const variant = {
@@ -84,6 +37,17 @@ const StatusBadge = ({ status }: { status: Bus["maintenanceStatus"] }) => {
 };
 
 export default function BusesPage() {
+  const firestore = useFirestore();
+  const busesQuery = useMemoFirebase(() => collection(firestore, "buses"), [firestore]);
+  const { data: busesData, isLoading } = useCollection<Bus>(busesQuery);
+
+  const handleDelete = (busId: string) => {
+    if (window.confirm("Are you sure you want to delete this bus?")) {
+      const busRef = doc(firestore, "buses", busId);
+      deleteDocumentNonBlocking(busRef);
+    }
+  };
+
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
@@ -97,12 +61,30 @@ export default function BusesPage() {
           <PlusCircle className="mr-2 h-4 w-4" /> Add New Bus
         </Button>
       </div>
-
+        {isLoading && (
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                {Array.from({ length: 4 }).map((_, i) => (
+                    <Card key={i}>
+                        <CardHeader className="relative">
+                            <div className="relative h-40 w-full rounded-t-lg overflow-hidden bg-muted animate-pulse"></div>
+                        </CardHeader>
+                        <CardContent className="space-y-2 pt-6">
+                            <div className="h-6 w-3/4 rounded bg-muted animate-pulse"></div>
+                            <div className="h-4 w-1/2 rounded bg-muted animate-pulse"></div>
+                            <div className="h-4 w-1/4 rounded bg-muted animate-pulse"></div>
+                        </CardContent>
+                        <CardFooter>
+                            <div className="h-10 w-full rounded bg-muted animate-pulse"></div>
+                        </CardFooter>
+                    </Card>
+                ))}
+            </div>
+        )}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-        {busesData.map((bus) => (
+        {busesData?.map((bus) => (
           <Card key={bus.id}>
-            <CardHeader className="relative">
-              {bus.imageUrl && (
+            <CardHeader className="relative p-0">
+              {bus.imageUrl ? (
                 <div className="relative h-40 w-full rounded-t-lg overflow-hidden">
                     <Image
                     src={bus.imageUrl}
@@ -111,6 +93,10 @@ export default function BusesPage() {
                     className="object-cover"
                     data-ai-hint="bus"
                   />
+                </div>
+              ) : (
+                <div className="h-40 w-full rounded-t-lg bg-muted flex items-center justify-center">
+                    <Bus className="h-16 w-16 text-muted-foreground" />
                 </div>
               )}
                <div className="absolute top-2 right-2">
@@ -127,7 +113,10 @@ export default function BusesPage() {
                         <Pencil className="mr-2 h-4 w-4" />
                         Edit Bus
                     </DropdownMenuItem>
-                    <DropdownMenuItem className="text-destructive focus:bg-destructive/10 focus:text-destructive">
+                    <DropdownMenuItem 
+                      className="text-destructive focus:bg-destructive/10 focus:text-destructive"
+                      onClick={() => handleDelete(bus.id)}
+                    >
                         <Trash2 className="mr-2 h-4 w-4" />
                         Delete Bus
                     </DropdownMenuItem>
@@ -135,7 +124,7 @@ export default function BusesPage() {
                 </DropdownMenu>
               </div>
             </CardHeader>
-            <CardContent className="space-y-2">
+            <CardContent className="space-y-2 pt-6">
                 <CardTitle className="text-lg">{bus.name}</CardTitle>
                 <CardDescription>Plate: {bus.plateNumber}</CardDescription>
                 <div className="flex items-center justify-between text-sm text-muted-foreground">

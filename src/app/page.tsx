@@ -3,17 +3,18 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Bus, Loader2 } from "lucide-react";
+import { signInWithEmailAndPassword } from "firebase/auth";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useAuth } from "@/hooks/useAuth";
+import { useAuth } from "@/firebase";
 import { useToast } from "@/hooks/use-toast";
 
 export default function LoginPage() {
   const router = useRouter();
-  const { login } = useAuth();
+  const auth = useAuth();
   const { toast } = useToast();
   const [email, setEmail] = useState("admin@swiftroute.com");
   const [password, setPassword] = useState("password");
@@ -23,7 +24,7 @@ export default function LoginPage() {
     e.preventDefault();
     setIsLoading(true);
     try {
-      await login(email, password);
+      await signInWithEmailAndPassword(auth, email, password);
       toast({
         title: "Login Successful",
         description: "Welcome back!",

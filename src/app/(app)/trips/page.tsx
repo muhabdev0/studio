@@ -21,6 +21,7 @@ import {
 import { PlusCircle } from "lucide-react";
 import { Calendar as CalendarIcon } from "lucide-react";
 import { format } from "date-fns";
+import { collection, Timestamp } from "firebase/firestore";
 
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -70,96 +71,7 @@ import {
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import type { Trip, Bus, Employee } from "@/lib/types";
-
-// Mock data, in a real app this would come from an API
-const initialTrips: Trip[] = [
-  {
-    id: "TRIP-101",
-    from: "New York, NY",
-    to: "Boston, MA",
-    dateTime: "2023-11-15T08:00:00Z",
-    busId: "BUS-01",
-    driverId: "DRV-A",
-    status: "Completed",
-    ticketPrice: 45.5,
-    totalSeats: 50,
-    bookedSeats: [1, 2, 3],
-  },
-  {
-    id: "TRIP-102",
-    from: "Los Angeles, CA",
-    to: "San Francisco, CA",
-    dateTime: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString(), // 2 days from now
-    busId: "BUS-02",
-    driverId: "DRV-B",
-    status: "Scheduled",
-    ticketPrice: 35.0,
-    totalSeats: 45,
-    bookedSeats: [],
-  },
-  {
-    id: "TRIP-103",
-    from: "Chicago, IL",
-    to: "Detroit, MI",
-    dateTime: "2023-11-14T09:30:00Z",
-    busId: "BUS-03",
-    driverId: "DRV-C",
-    status: "Completed",
-    ticketPrice: 60.0,
-    totalSeats: 55,
-    bookedSeats: [1],
-  },
-  {
-    id: "TRIP-104",
-    from: "Miami, FL",
-    to: "Orlando, FL",
-    dateTime: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString(), // 5 days from now
-    busId: "BUS-04",
-    driverId: "DRV-D",
-    status: "Scheduled",
-    ticketPrice: 50.0,
-    totalSeats: 40,
-    bookedSeats: [],
-  },
-  {
-    id: "TRIP-105",
-    from: "Denver, CO",
-    to: "Salt Lake City, UT",
-    dateTime: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(), // 3 days ago
-    busId: "BUS-05",
-    driverId: "DRV-E",
-    status: "Cancelled",
-    ticketPrice: 25.75,
-    totalSeats: 60,
-    bookedSeats: [],
-  },
-  {
-    id: "TRIP-106",
-    from: "Boston, MA",
-    to: "New York, NY",
-    dateTime: "2023-11-15T18:00:00Z",
-    busId: "BUS-01",
-    driverId: "DRV-A",
-    status: "Completed",
-    ticketPrice: 45.5,
-    totalSeats: 50,
-    bookedSeats: [5, 8],
-  },
-];
-
-const buses: Omit<Bus, 'imageUrl'>[] = [
-  { id: "BUS-01", name: "City Cruiser 1", plateNumber: "NYC-1234", capacity: 50, maintenanceStatus: "Operational" },
-  { id: "BUS-02", name: "MetroLink 5", plateNumber: "LA-5678", capacity: 45, maintenanceStatus: "Operational" },
-  { id: "BUS-03", name: "Downtown Express", plateNumber: "CHI-9101", capacity: 55, maintenanceStatus: "Maintenance" },
-];
-
-const drivers: Employee[] = [
-  { id: "DRV-A", fullName: "Bob Williams", role: "Driver", contactInfo: "555-1234", salary: 50000 },
-  { id: "DRV-B", fullName: "Charlie Brown", role: "Driver", contactInfo: "555-5678", salary: 52000 },
-  { id: "DRV-C", fullName: "Diana Miller", role: "Admin", contactInfo: "diana@example.com", salary: 80000 },
-  { id: "DRV-D", fullName: "Alex Ray", role: "Driver", contactInfo: "555-4321", salary: 51000 },
-  { id: "DRV-E", fullName: "Sam Wilson", role: "Driver", contactInfo: "555-8765", salary: 53000 },
-];
+import { useFirestore, useCollection, useMemoFirebase, addDocumentNonBlocking } from "@/firebase";
 
 export const columns: ColumnDef<Trip>[] = [
   {
@@ -209,9 +121,10 @@ export const columns: ColumnDef<Trip>[] = [
         </Button>
       );
     },
-    cell: ({ row }) => (
-      <div>{new Date(row.getValue("dateTime")).toLocaleString()}</div>
-    ),
+    cell: ({ row }) => {
+      const timestamp = row.getValue("dateTime") as Timestamp;
+      return <div>{timestamp.toDate().toLocaleString()}</div>
+    },
   },
   {
     accessorKey: "busId",
@@ -268,7 +181,19 @@ export const columns: ColumnDef<Trip>[] = [
   },
 ];
 
-function NewTripDialog({ open, onOpenChange, onAddTrip }: { open: boolean, onOpenChange: (open: boolean) => void, onAddTrip: (newTrip: Trip) => void }) {
+function NewTripDialog({ 
+    open, 
+    onOpenChange, 
+    onAddTrip,
+    buses,
+    drivers
+}: { 
+    open: boolean, 
+    onOpenChange: (open: boolean) => void, 
+    onAddTrip: (newTrip: Omit<Trip, "id">) => void,
+    buses: Bus[],
+    drivers: Employee[]
+}) {
   const [from, setFrom] = React.useState("");
   const [to, setTo] = React.useState("");
   const [dateTime, setDateTime] = React.useState<Date>();
@@ -282,11 +207,10 @@ function NewTripDialog({ open, onOpenChange, onAddTrip }: { open: boolean, onOpe
   const handleCreateTrip = () => {
     if (!from || !to || !dateTime || !busId || !driverId || !ticketPrice || !selectedBus) return;
     
-    const newTrip: Trip = {
-      id: `TRIP-${Date.now()}`,
+    const newTrip: Omit<Trip, "id"> = {
       from,
       to,
-      dateTime: dateTime.toISOString(),
+      dateTime: Timestamp.fromDate(dateTime),
       busId,
       driverId,
       status: new Date(dateTime) > new Date() ? "Scheduled" : "Completed",
@@ -387,7 +311,17 @@ function NewTripDialog({ open, onOpenChange, onAddTrip }: { open: boolean, onOpe
 }
 
 export default function TripsPage() {
-  const [trips, setTrips] = React.useState<Trip[]>(initialTrips);
+  const firestore = useFirestore();
+
+  const tripsQuery = useMemoFirebase(() => collection(firestore, "trips"), [firestore]);
+  const { data: trips, isLoading: isLoadingTrips } = useCollection<Trip>(tripsQuery);
+  
+  const busesQuery = useMemoFirebase(() => collection(firestore, "buses"), [firestore]);
+  const { data: buses, isLoading: isLoadingBuses } = useCollection<Bus>(busesQuery);
+  
+  const employeesQuery = useMemoFirebase(() => collection(firestore, "employees"), [firestore]);
+  const { data: employees, isLoading: isLoadingEmployees } = useCollection<Employee>(employeesQuery);
+  
   const [sorting, setSorting] = React.useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([]);
   const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({});
@@ -395,7 +329,7 @@ export default function TripsPage() {
   const [isNewTripDialogOpen, setIsNewTripDialogOpen] = React.useState(false);
 
   const table = useReactTable({
-    data: trips,
+    data: trips ?? [],
     columns,
     onSortingChange: setSorting,
     onColumnFiltersChange: setColumnFilters,
@@ -413,24 +347,12 @@ export default function TripsPage() {
     },
   });
 
-  React.useEffect(() => {
-    const interval = setInterval(() => {
-      setTrips(prevTrips =>
-        prevTrips.map(trip => {
-          const tripDate = new Date(trip.dateTime);
-          if (trip.status === "Scheduled" && tripDate < new Date()) {
-            return { ...trip, status: "Completed" };
-          }
-          return trip;
-        })
-      );
-    }, 60000); // Check every minute
-    return () => clearInterval(interval);
-  }, []);
-
-  const handleAddTrip = (newTrip: Trip) => {
-    setTrips(prevTrips => [newTrip, ...prevTrips]);
+  const handleAddTrip = (newTrip: Omit<Trip, "id">) => {
+    const tripsCollection = collection(firestore, 'trips');
+    addDocumentNonBlocking(tripsCollection, newTrip);
   };
+  
+  const isLoading = isLoadingTrips || isLoadingBuses || isLoadingEmployees;
 
   return (
     <>
@@ -512,7 +434,13 @@ export default function TripsPage() {
                   ))}
                 </TableHeader>
                 <TableBody>
-                  {table.getRowModel().rows?.length ? (
+                  {isLoading ? (
+                    <TableRow>
+                        <TableCell colSpan={columns.length} className="h-24 text-center">
+                            Loading...
+                        </TableCell>
+                    </TableRow>
+                   ) : table.getRowModel().rows?.length ? (
                     table.getRowModel().rows.map((row) => (
                       <TableRow
                         key={row.id}
@@ -572,6 +500,8 @@ export default function TripsPage() {
         open={isNewTripDialogOpen} 
         onOpenChange={setIsNewTripDialogOpen}
         onAddTrip={handleAddTrip}
+        buses={buses ?? []}
+        drivers={employees ?? []}
       />
     </>
   );

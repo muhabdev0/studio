@@ -19,6 +19,7 @@ import {
   getSortedRowModel,
   useReactTable,
 } from "@tanstack/react-table";
+import { collection } from "firebase/firestore";
 
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -50,19 +51,7 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import type { Employee, UserRole } from "@/lib/types";
-import { PlaceHolderImages } from "@/lib/placeholder-images";
-
-const getImage = (id: string) => PlaceHolderImages.find(img => img.id === id);
-
-
-const data: Employee[] = [
-    { id: "EMP-001", fullName: "Alice Johnson", role: "Manager", contactInfo: "alice@example.com", salary: 75000, profilePhotoUrl: getImage("employee1")?.imageUrl },
-    { id: "EMP-002", fullName: "Bob Williams", role: "Driver", contactInfo: "555-1234", salary: 50000, profilePhotoUrl: getImage("employee2")?.imageUrl },
-    { id: "EMP-003", fullName: "Charlie Brown", role: "Driver", contactInfo: "555-5678", salary: 52000, profilePhotoUrl: getImage("employee3")?.imageUrl },
-    { id: "EMP-004", fullName: "Diana Miller", role: "Admin", contactInfo: "diana@example.com", salary: 80000, profilePhotoUrl: getImage("employee4")?.imageUrl },
-    { id: "EMP-005", fullName: "Ethan Davis", role: "Mechanic", contactInfo: "555-8765", salary: 60000, profilePhotoUrl: getImage("employee5")?.imageUrl },
-];
-
+import { useFirestore, useCollection, useMemoFirebase } from "@/firebase";
 
 const getRoleBadgeVariant = (role: UserRole) => {
     switch(role) {
@@ -72,7 +61,6 @@ const getRoleBadgeVariant = (role: UserRole) => {
         default: return "outline";
     }
 }
-
 
 export const columns: ColumnDef<Employee>[] = [
   {
@@ -184,6 +172,10 @@ export const columns: ColumnDef<Employee>[] = [
 ];
 
 export default function EmployeesPage() {
+  const firestore = useFirestore();
+  const employeesQuery = useMemoFirebase(() => collection(firestore, "employees"), [firestore]);
+  const { data: employeesData, isLoading } = useCollection<Employee>(employeesQuery);
+
   const [sorting, setSorting] = React.useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>(
     []
@@ -193,7 +185,7 @@ export default function EmployeesPage() {
   const [rowSelection, setRowSelection] = React.useState({});
 
   const table = useReactTable({
-    data,
+    data: employeesData ?? [],
     columns,
     onSortingChange: setSorting,
     onColumnFiltersChange: setColumnFilters,
@@ -289,7 +281,13 @@ export default function EmployeesPage() {
                 ))}
               </TableHeader>
               <TableBody>
-                {table.getRowModel().rows?.length ? (
+                {isLoading ? (
+                    <TableRow>
+                        <TableCell colSpan={columns.length} className="h-24 text-center">
+                            Loading...
+                        </TableCell>
+                    </TableRow>
+                ) : table.getRowModel().rows?.length ? (
                   table.getRowModel().rows.map((row) => (
                     <TableRow
                       key={row.id}

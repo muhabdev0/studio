@@ -20,7 +20,7 @@ import {
   SidebarMenuItem,
   SidebarMenuButton,
 } from "@/components/ui/sidebar";
-import { useAuth } from "@/hooks/useAuth";
+import { useUser } from "@/firebase";
 
 const menuItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -33,7 +33,10 @@ const menuItems = [
 
 export function AppSidebar() {
   const pathname = usePathname();
-  const { user } = useAuth();
+  // The useUser hook now provides the user object from Firebase Auth
+  const { user } = useUser();
+  // We'll hardcode the role for now, but this could come from a custom claim
+  const userRole = "Admin"; 
 
   return (
     <Sidebar>
@@ -48,7 +51,7 @@ export function AppSidebar() {
       <SidebarContent>
         <SidebarMenu>
           {menuItems.map((item) => {
-            if (item.role && item.role !== user?.role) {
+            if (item.role && item.role !== userRole) {
               return null;
             }
             const isActive =

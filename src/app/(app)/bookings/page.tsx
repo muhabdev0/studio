@@ -19,6 +19,7 @@ import {
   useReactTable,
 } from "@tanstack/react-table";
 import { PlusCircle } from "lucide-react";
+import { collection, Timestamp, doc } from "firebase/firestore";
 
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -55,7 +56,6 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import {
@@ -65,148 +65,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import type { Trip } from "@/lib/types";
+import type { Trip, TicketBooking } from "@/lib/types";
+import { useFirestore, useCollection, useMemoFirebase, addDocumentNonBlocking } from "@/firebase";
 
-const data: Ticket[] = [
-  {
-    id: "TKT-001",
-    tripId: "TRIP-101",
-    customerName: "Alice Johnson",
-    seatNumber: 12,
-    price: 45.5,
-    bookingDate: "2023-10-26T10:00:00Z",
-    status: "Confirmed",
-  },
-  {
-    id: "TKT-002",
-    tripId: "TRIP-102",
-    customerName: "Bob Williams",
-    seatNumber: 5,
-    price: 35.0,
-    bookingDate: "2023-10-25T14:30:00Z",
-    status: "Confirmed",
-  },
-  {
-    id: "TKT-003",
-    tripId: "TRIP-101",
-    customerName: "Charlie Brown",
-    seatNumber: 13,
-    price: 45.5,
-    bookingDate: "2023-10-26T11:00:00Z",
-    status: "Cancelled",
-  },
-  {
-    id: "TKT-004",
-    tripId: "TRIP-103",
-    customerName: "Diana Miller",
-    seatNumber: 1,
-    price: 60.0,
-    bookingDate: "2023-10-24T09:00:00Z",
-    status: "Confirmed",
-  },
-  {
-    id: "TKT-005",
-    tripId: "TRIP-102",
-    customerName: "Ethan Davis",
-    seatNumber: 6,
-    price: 35.0,
-    bookingDate: "2023-10-25T15:00:00Z",
-    status: "Pending",
-  },
-  {
-    id: "TKT-006",
-    tripId: "TRIP-104",
-    customerName: "Fiona Garcia",
-    seatNumber: 22,
-    price: 50.0,
-    bookingDate: "2023-11-01T12:00:00Z",
-    status: "Confirmed",
-  },
-  {
-    id: "TKT-007",
-    tripId: "TRIP-105",
-    customerName: "George Rodriguez",
-    seatNumber: 18,
-    price: 25.75,
-    bookingDate: "2023-11-02T18:00:00Z",
-    status: "Confirmed",
-  },
-];
-
-const trips: Trip[] = [
-  {
-    id: "TRIP-101",
-    from: "New York, NY",
-    to: "Boston, MA",
-    dateTime: "2023-11-15T08:00:00Z",
-    busId: "BUS-01",
-    driverId: "DRV-A",
-    status: "Scheduled",
-    ticketPrice: 45.5,
-    totalSeats: 50,
-    bookedSeats: [12, 13],
-  },
-  {
-    id: "TRIP-102",
-    from: "Los Angeles, CA",
-    to: "San Francisco, CA",
-    dateTime: "2023-11-16T10:00:00Z",
-    busId: "BUS-02",
-    driverId: "DRV-B",
-    status: "In Progress",
-    ticketPrice: 35.0,
-    totalSeats: 45,
-    bookedSeats: [5, 6],
-  },
-  {
-    id: "TRIP-103",
-    from: "Chicago, IL",
-    to: "Detroit, MI",
-    dateTime: "2023-11-14T09:30:00Z",
-    busId: "BUS-03",
-    driverId: "DRV-C",
-    status: "Completed",
-    ticketPrice: 60.0,
-    totalSeats: 55,
-    bookedSeats: [1],
-  },
-  {
-    id: "TRIP-104",
-    from: "Miami, FL",
-    to: "Orlando, FL",
-    dateTime: "2023-11-17T13:00:00Z",
-    busId: "BUS-04",
-    driverId: "DRV-D",
-    status: "Scheduled",
-    ticketPrice: 50.0,
-    totalSeats: 40,
-    bookedSeats: [22],
-  },
-  {
-    id: "TRIP-105",
-    from: "Denver, CO",
-    to: "Salt Lake City, UT",
-    dateTime: "2023-11-18T07:00:00Z",
-    busId: "BUS-05",
-    driverId: "DRV-E",
-    status: "Cancelled",
-    ticketPrice: 25.75,
-    totalSeats: 60,
-    bookedSeats: [18],
-  },
-];
-
-export type Ticket = {
-  id: string;
-  tripId: string;
-  customerName: string;
-  seatNumber: number;
-  price: number;
-  bookingDate: string;
-  status: "Confirmed" | "Pending" | "Cancelled";
-};
-
-export const columns: ColumnDef<Ticket>[] = [
+export const columns: ColumnDef<TicketBooking>[] = [
   {
     id: "select",
     header: ({ table }) => (
@@ -281,9 +143,10 @@ export const columns: ColumnDef<Ticket>[] = [
   {
     accessorKey: "bookingDate",
     header: "Booking Date",
-    cell: ({ row }) => (
-      <div>{new Date(row.getValue("bookingDate")).toLocaleDateString()}</div>
-    ),
+    cell: ({ row }) => {
+        const timestamp = row.getValue("bookingDate") as Timestamp;
+        return <div>{timestamp.toDate().toLocaleDateString()}</div>
+    },
   },
   {
     id: "actions",
@@ -316,8 +179,20 @@ export const columns: ColumnDef<Ticket>[] = [
   },
 ];
 
-function NewBookingDialog({ open, onOpenChange }: { open: boolean, onOpenChange: (open: boolean) => void }) {
+function NewBookingDialog({ 
+    open, 
+    onOpenChange,
+    trips,
+    onBookingCreated
+}: { 
+    open: boolean, 
+    onOpenChange: (open: boolean) => void,
+    trips: Trip[],
+    onBookingCreated: (booking: Omit<TicketBooking, "id">) => void
+}) {
+  const [customerName, setCustomerName] = React.useState("");
   const [selectedTripId, setSelectedTripId] = React.useState<string | undefined>();
+  const [selectedSeat, setSelectedSeat] = React.useState<number | undefined>();
   
   const selectedTrip = trips.find(t => t.id === selectedTripId);
 
@@ -327,6 +202,26 @@ function NewBookingDialog({ open, onOpenChange }: { open: boolean, onOpenChange:
     const allSeats = Array.from({ length: selectedTrip.totalSeats }, (_, i) => i + 1);
     return allSeats.filter(seat => !booked.includes(seat));
   }, [selectedTrip]);
+
+  const handleCreateBooking = () => {
+    if (!customerName || !selectedTrip || !selectedSeat) return;
+
+    const newBooking: Omit<TicketBooking, "id"> = {
+        tripId: selectedTrip.id,
+        customerName,
+        seatNumber: selectedSeat,
+        price: selectedTrip.ticketPrice,
+        bookingDate: Timestamp.now(),
+        status: "Confirmed",
+    };
+    onBookingCreated(newBooking);
+    onOpenChange(false);
+    // Reset form
+    setCustomerName("");
+    setSelectedTripId(undefined);
+    setSelectedSeat(undefined);
+  };
+
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -342,7 +237,7 @@ function NewBookingDialog({ open, onOpenChange }: { open: boolean, onOpenChange:
             <Label htmlFor="customerName" className="text-right">
               Customer Name
             </Label>
-            <Input id="customerName" className="col-span-3" />
+            <Input id="customerName" value={customerName} onChange={e => setCustomerName(e.target.value)} className="col-span-3" />
           </div>
           <div className="grid grid-cols-4 items-center gap-4">
             <Label htmlFor="trip" className="text-right">
@@ -355,7 +250,7 @@ function NewBookingDialog({ open, onOpenChange }: { open: boolean, onOpenChange:
               <SelectContent>
                 {trips.filter(t => t.status === "Scheduled").map((trip) => (
                   <SelectItem key={trip.id} value={trip.id}>
-                    {trip.from} to {trip.to} ({new Date(trip.dateTime).toLocaleDateString()})
+                    {trip.from} to {trip.to} ({trip.dateTime.toDate().toLocaleDateString()})
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -367,7 +262,7 @@ function NewBookingDialog({ open, onOpenChange }: { open: boolean, onOpenChange:
                 <Label htmlFor="seat" className="text-right">
                   Seat
                 </Label>
-                <Select>
+                <Select onValueChange={(val) => setSelectedSeat(Number(val))}>
                   <SelectTrigger className="col-span-3">
                     <SelectValue placeholder="Select a seat" />
                   </SelectTrigger>
@@ -390,7 +285,7 @@ function NewBookingDialog({ open, onOpenChange }: { open: boolean, onOpenChange:
           )}
         </div>
         <DialogFooter>
-          <Button type="submit">Create Booking</Button>
+          <Button type="submit" onClick={handleCreateBooking}>Create Booking</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -399,6 +294,14 @@ function NewBookingDialog({ open, onOpenChange }: { open: boolean, onOpenChange:
 
 
 export default function BookingsPage() {
+  const firestore = useFirestore();
+
+  const bookingsQuery = useMemoFirebase(() => collection(firestore, "ticketBookings"), [firestore]);
+  const { data: bookingsData, isLoading: isLoadingBookings } = useCollection<TicketBooking>(bookingsQuery);
+  
+  const tripsQuery = useMemoFirebase(() => collection(firestore, "trips"), [firestore]);
+  const { data: tripsData, isLoading: isLoadingTrips } = useCollection<Trip>(tripsQuery);
+
   const [sorting, setSorting] = React.useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>(
     []
@@ -410,7 +313,7 @@ export default function BookingsPage() {
 
 
   const table = useReactTable({
-    data,
+    data: bookingsData ?? [],
     columns,
     onSortingChange: setSorting,
     onColumnFiltersChange: setColumnFilters,
@@ -427,6 +330,13 @@ export default function BookingsPage() {
       rowSelection,
     },
   });
+
+  const handleBookingCreated = (newBooking: Omit<TicketBooking, "id">) => {
+    const bookingsCollection = collection(firestore, 'ticketBookings');
+    addDocumentNonBlocking(bookingsCollection, newBooking);
+  }
+
+  const isLoading = isLoadingBookings || isLoadingTrips;
 
   return (
     <>
@@ -508,7 +418,13 @@ export default function BookingsPage() {
                   ))}
                 </TableHeader>
                 <TableBody>
-                  {table.getRowModel().rows?.length ? (
+                  {isLoading ? (
+                    <TableRow>
+                        <TableCell colSpan={columns.length} className="h-24 text-center">
+                            Loading...
+                        </TableCell>
+                    </TableRow>
+                  ) : table.getRowModel().rows?.length ? (
                     table.getRowModel().rows.map((row) => (
                       <TableRow
                         key={row.id}
@@ -564,9 +480,12 @@ export default function BookingsPage() {
           </div>
         </CardContent>
       </Card>
-      <NewBookingDialog open={isNewBookingDialogOpen} onOpenChange={setIsNewBookingDialogOpen} />
+      <NewBookingDialog 
+        open={isNewBookingDialogOpen} 
+        onOpenChange={setIsNewBookingDialogOpen}
+        trips={tripsData ?? []}
+        onBookingCreated={handleBookingCreated}
+      />
     </>
   );
 }
-
-    

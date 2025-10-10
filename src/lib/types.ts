@@ -1,3 +1,5 @@
+import { Timestamp } from "firebase/firestore";
+
 export type UserRole = "Admin" | "Manager" | "Driver" | "Employee" | "Mechanic";
 
 export interface User {
@@ -31,7 +33,7 @@ export interface Trip {
   id: string;
   from: string;
   to: string;
-  dateTime: string;
+  dateTime: Timestamp;
   busId: string;
   driverId: string;
   ticketPrice: number;
@@ -40,23 +42,21 @@ export interface Trip {
   status: "Scheduled" | "In Progress" | "Completed" | "Cancelled";
 }
 
-export interface Ticket {
+export interface TicketBooking {
   id: string;
   tripId: string;
   customerName: string;
   seatNumber: number;
   price: number;
-  bookingDate: string;
+  bookingDate: Timestamp;
   status: "Confirmed" | "Pending" | "Cancelled";
 }
 
-export interface FinanceEntry {
+export interface FinanceRecord {
   id: string;
   type: "Income" | "Expense";
   category: "Ticket Sale" | "Salary" | "Maintenance" | "Rent" | "Other";
   amount: number;
-  date: string;
+  date: Timestamp;
   description: string;
 }
-
-    
