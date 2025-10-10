@@ -265,51 +265,31 @@
       "schema": {
         "$ref": "#/entities/Employee"
       },
-      "description": "Stores employee profiles.",
-      "rules": {
-        "read": "request.auth != null",
-        "write": "request.auth != null"
-      }
+      "description": "Stores employee profiles."
     },
     "/buses/{busId}": {
       "schema": {
         "$ref": "#/entities/Bus"
       },
-      "description": "Stores bus information.",
-      "rules": {
-        "read": "request.auth != null",
-        "write": "request.auth != null"
-      }
+      "description": "Stores bus information."
     },
     "/trips/{tripId}": {
       "schema": {
         "$ref": "#/entities/Trip"
       },
-      "description": "Stores trip details.",
-      "rules": {
-        "read": "request.auth != null",
-        "write": "request.auth != null"
-      }
+      "description": "Stores trip details."
     },
     "/ticketBookings/{ticketBookingId}": {
       "schema": {
         "$ref": "#/entities/TicketBooking"
       },
-      "description": "Stores ticket booking information for a specific trip.",
-      "rules": {
-        "read": "request.auth != null",
-        "write": "request.auth != null"
-      }
+      "description": "Stores ticket booking information for a specific trip."
     },
     "/financeRecords/{financeRecordId}": {
       "schema": {
         "$ref": "#/entities/FinanceRecord"
       },
-      "description": "Stores financial records.",
-      "rules": {
-        "read": "request.auth != null",
-        "write": "request.auth != null"
-      }
+      "description": "Stores financial records."
     }
   }
 }
