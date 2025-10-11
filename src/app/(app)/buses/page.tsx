@@ -41,50 +41,79 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { Bus } from "@/lib/types";
-import { useFirestore, useCollection, useMemoFirebase, deleteDocumentNonBlocking, addDocumentNonBlocking } from "@/firebase";
+import { useFirestore, useCollection, useMemoFirebase, deleteDocumentNonBlocking, addDocumentNonBlocking, updateDocumentNonBlocking } from "@/firebase";
 
 const maintenanceStatuses: Bus["maintenanceStatus"][] = ["Operational", "Maintenance", "Out of Service"];
 
-function NewBusDialog({ 
+function BusDialog({ 
     open, 
     onOpenChange, 
-    onBusCreated 
+    onSave,
+    bus
 }: { 
     open: boolean; 
     onOpenChange: (open: boolean) => void; 
-    onBusCreated: (bus: Omit<Bus, "id">) => void;
+    onSave: (bus: Partial<Bus>) => void;
+    bus?: Bus | null;
 }) {
   const [name, setName] = React.useState("");
   const [plateNumber, setPlateNumber] = React.useState("");
   const [capacity, setCapacity] = React.useState<number>(0);
   const [maintenanceStatus, setMaintenanceStatus] = React.useState<Bus["maintenanceStatus"]>("Operational");
+  const [imageUrl, setImageUrl] = React.useState<string | null>(null);
 
-  const handleCreateBus = () => {
+  const isEditMode = !!bus;
+
+  React.useEffect(() => {
+      if (bus) {
+          setName(bus.name || "");
+          setPlateNumber(bus.plateNumber || "");
+          setCapacity(bus.capacity || 0);
+          setMaintenanceStatus(bus.maintenanceStatus || "Operational");
+          setImageUrl(bus.imageUrl || null);
+      } else {
+          // Reset for new bus
+          setName("");
+          setPlateNumber("");
+          setCapacity(0);
+          setMaintenanceStatus("Operational");
+          setImageUrl(null);
+      }
+  }, [bus, open]);
+
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (file) {
+          const reader = new FileReader();
+          reader.onloadend = () => {
+              setImageUrl(reader.result as string);
+          };
+          reader.readAsDataURL(file);
+      }
+  };
+
+  const handleSave = () => {
     if (!name || !plateNumber || capacity <= 0) return;
 
-    const newBus: Omit<Bus, "id"> = {
+    const busData: Partial<Bus> = {
       name,
       plateNumber,
       capacity,
       maintenanceStatus,
-      imageUrl: `https://picsum.photos/seed/${plateNumber}/600/400`,
+      imageUrl: imageUrl || `https://picsum.photos/seed/${plateNumber}/600/400`,
     };
-    onBusCreated(newBus);
+
+    onSave(busData);
     onOpenChange(false);
-    // Reset form
-    setName("");
-    setPlateNumber("");
-    setCapacity(0);
-    setMaintenanceStatus("Operational");
   };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
-          <DialogTitle>Add New Bus</DialogTitle>
+          <DialogTitle>{isEditMode ? 'Edit Bus' : 'Add New Bus'}</DialogTitle>
           <DialogDescription>
-            Enter the details for the new bus.
+            {isEditMode ? 'Update the details of the bus.' : 'Enter the details for the new bus.'}
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-4 py-4">
@@ -123,9 +152,23 @@ function NewBusDialog({
               </SelectContent>
             </Select>
           </div>
+          <div className="grid grid-cols-4 items-center gap-4">
+            <Label htmlFor="image" className="text-right">
+              Image
+            </Label>
+            <Input id="image" type="file" accept="image/*" onChange={handleImageChange} className="col-span-3" />
+          </div>
+          {imageUrl && (
+            <div className="grid grid-cols-4 items-center gap-4">
+                <Label className="text-right">Preview</Label>
+                <div className="col-span-3">
+                    <Image src={imageUrl} alt="Bus preview" width={150} height={100} className="rounded-md object-cover" />
+                </div>
+            </div>
+          )}
         </div>
         <DialogFooter>
-          <Button type="submit" onClick={handleCreateBus}>Create Bus</Button>
+          <Button type="submit" onClick={handleSave}>{isEditMode ? 'Save Changes' : 'Create Bus'}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -146,7 +189,10 @@ export default function BusesPage() {
   const firestore = useFirestore();
   const busesQuery = useMemoFirebase(() => collection(firestore, "buses"), [firestore]);
   const { data: busesData, isLoading } = useCollection<Bus>(busesQuery);
+  
   const [isNewBusDialogOpen, setIsNewBusDialogOpen] = React.useState(false);
+  const [isEditBusDialogOpen, setIsEditBusDialogOpen] = React.useState(false);
+  const [selectedBus, setSelectedBus] = React.useState<Bus | null>(null);
 
   const handleDelete = (busId: string) => {
     if (window.confirm("Are you sure you want to delete this bus?")) {
@@ -155,9 +201,20 @@ export default function BusesPage() {
     }
   };
 
-  const handleBusCreated = (newBus: Omit<Bus, "id">) => {
+  const handleBusCreated = (newBus: Partial<Bus>) => {
     const busesCollection = collection(firestore, 'buses');
     addDocumentNonBlocking(busesCollection, newBus);
+  };
+
+  const handleBusUpdated = (updatedBus: Partial<Bus>) => {
+    if (!selectedBus) return;
+    const busRef = doc(firestore, 'buses', selectedBus.id);
+    updateDocumentNonBlocking(busRef, updatedBus);
+  };
+  
+  const openEditDialog = (bus: Bus) => {
+      setSelectedBus(bus);
+      setIsEditBusDialogOpen(true);
   };
 
   return (
@@ -222,7 +279,7 @@ export default function BusesPage() {
                     <DropdownMenuContent align="end">
                       <DropdownMenuLabel>Actions</DropdownMenuLabel>
                       <DropdownMenuSeparator />
-                      <DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => openEditDialog(bus)}>
                           <Pencil className="mr-2 h-4 w-4" />
                           Edit Bus
                       </DropdownMenuItem>
@@ -252,10 +309,16 @@ export default function BusesPage() {
           ))}
         </div>
       </div>
-      <NewBusDialog 
+      <BusDialog 
         open={isNewBusDialogOpen} 
         onOpenChange={setIsNewBusDialogOpen} 
-        onBusCreated={handleBusCreated} 
+        onSave={handleBusCreated}
+      />
+      <BusDialog
+        open={isEditBusDialogOpen}
+        onOpenChange={setIsEditBusDialogOpen}
+        onSave={handleBusUpdated}
+        bus={selectedBus}
       />
     </>
   );
