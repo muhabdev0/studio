@@ -76,7 +76,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import type { Trip, TicketBooking } from "@/lib/types";
+import type { Trip, TicketBooking, FinanceRecord } from "@/lib/types";
 import { useFirestore, useCollection, useMemoFirebase, addDocumentNonBlocking, deleteDocumentNonBlocking, updateDocumentNonBlocking } from "@/firebase";
 
 function EditBookingDialog({
@@ -256,7 +256,18 @@ export default function BookingsPage() {
               if (tripSnap.exists()) {
                   updateDoc(tripRef, { bookedSeats: arrayUnion(newBooking.seatNumber) });
               }
-          })
+          });
+
+          // Create a corresponding finance record for the income
+          const financeCollection = collection(firestore, 'financeRecords');
+          const financeRecord: Omit<FinanceRecord, "id"> = {
+              type: "Income",
+              category: "Ticket Sale",
+              amount: newBooking.price,
+              date: newBooking.bookingDate,
+              description: `Ticket sale for ${newBooking.customerName} on trip ${newBooking.tripId}`
+          };
+          addDocumentNonBlocking(financeCollection, financeRecord);
         }
       });
   };
