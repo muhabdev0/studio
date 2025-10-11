@@ -1,3 +1,4 @@
+
 "use client";
 
 import * as React from "react";
@@ -19,7 +20,7 @@ import {
   useReactTable,
 } from "@tanstack/react-table";
 import { PlusCircle } from "lucide-react";
-import { collection, Timestamp, doc, updateDoc, arrayRemove, arrayUnion } from "firebase/firestore";
+import { collection, Timestamp, doc, updateDoc, arrayRemove, arrayUnion, getDoc } from "firebase/firestore";
 
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -251,7 +252,11 @@ export default function BookingsPage() {
       .then(docRef => {
         if (docRef) {
           const tripRef = doc(firestore, 'trips', newBooking.tripId);
-          updateDoc(tripRef, { bookedSeats: arrayUnion(newBooking.seatNumber) });
+          getDoc(tripRef).then(tripSnap => {
+              if (tripSnap.exists()) {
+                  updateDoc(tripRef, { bookedSeats: arrayUnion(newBooking.seatNumber) });
+              }
+          })
         }
       });
   };
@@ -267,11 +272,19 @@ export default function BookingsPage() {
     if (newTripId && newSeat && (newTripId !== oldTripId || newSeat !== oldSeat)) {
         // Free up old seat
         const oldTripRef = doc(firestore, 'trips', oldTripId);
-        updateDoc(oldTripRef, { bookedSeats: arrayRemove(oldSeat) });
+         getDoc(oldTripRef).then(tripSnap => {
+            if (tripSnap.exists()) {
+                updateDoc(oldTripRef, { bookedSeats: arrayRemove(oldSeat) });
+            }
+        });
 
         // Book new seat
         const newTripRef = doc(firestore, 'trips', newTripId);
-        updateDoc(newTripRef, { bookedSeats: arrayUnion(newSeat) });
+        getDoc(newTripRef).then(tripSnap => {
+            if (tripSnap.exists()) {
+                updateDoc(newTripRef, { bookedSeats: arrayUnion(newSeat) });
+            }
+        });
     }
   };
 
@@ -282,8 +295,12 @@ export default function BookingsPage() {
 
     // Free up the seat on the trip
     const tripRef = doc(firestore, 'trips', selectedBooking.tripId);
-    updateDoc(tripRef, {
-        bookedSeats: arrayRemove(selectedBooking.seatNumber)
+    getDoc(tripRef).then(tripSnap => {
+        if (tripSnap.exists()) {
+            updateDoc(tripRef, {
+                bookedSeats: arrayRemove(selectedBooking.seatNumber)
+            });
+        }
     });
 
     setIsDeleteDialogOpen(false);
