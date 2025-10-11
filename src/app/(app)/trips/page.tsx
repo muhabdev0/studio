@@ -104,6 +104,7 @@ function EditTripDialog({
     const [from, setFrom] = React.useState("");
     const [to, setTo] = React.useState("");
     const [dateTime, setDateTime] = React.useState<Date>();
+    const [time, setTime] = React.useState("00:00");
     const [busId, setBusId] = React.useState<string>();
     const [driverId, setDriverId] = React.useState<string>();
     const [ticketPrice, setTicketPrice] = React.useState<number>(0);
@@ -115,7 +116,9 @@ function EditTripDialog({
         if (trip) {
             setFrom(trip.from);
             setTo(trip.to);
-            setDateTime(trip.dateTime.toDate());
+            const tripDate = trip.dateTime.toDate();
+            setDateTime(tripDate);
+            setTime(format(tripDate, "HH:mm"));
             setBusId(trip.busId);
             setDriverId(trip.driverId);
             setTicketPrice(trip.ticketPrice);
@@ -126,10 +129,14 @@ function EditTripDialog({
     const handleUpdateTrip = () => {
         if (!trip || !from || !to || !dateTime || !busId || !driverId || !ticketPrice) return;
 
+        const [hours, minutes] = time.split(':').map(Number);
+        const combinedDateTime = new Date(dateTime);
+        combinedDateTime.setHours(hours, minutes);
+
         const updatedData: Partial<Trip> = {
             from,
             to,
-            dateTime: Timestamp.fromDate(dateTime),
+            dateTime: Timestamp.fromDate(combinedDateTime),
             busId,
             driverId,
             ticketPrice,
@@ -166,13 +173,13 @@ function EditTripDialog({
                         <Input id="to" value={to} onChange={e => setTo(e.target.value)} className="col-span-3" />
                     </div>
                     <div className="grid grid-cols-4 items-center gap-4">
-                        <Label htmlFor="date" className="text-right">Date</Label>
+                        <Label htmlFor="date" className="text-right">Date & Time</Label>
                         <Popover>
                             <PopoverTrigger asChild>
                                 <Button
                                     variant={"outline"}
                                     className={cn(
-                                        "col-span-3 justify-start text-left font-normal",
+                                        "col-span-2 justify-start text-left font-normal",
                                         !dateTime && "text-muted-foreground"
                                     )}
                                 >
@@ -184,6 +191,7 @@ function EditTripDialog({
                                 <Calendar mode="single" selected={dateTime} onSelect={setDateTime} initialFocus />
                             </PopoverContent>
                         </Popover>
+                        <Input type="time" value={time} onChange={(e) => setTime(e.target.value)} className="col-span-1" />
                     </div>
                     <div className="grid grid-cols-4 items-center gap-4">
                         <Label htmlFor="bus" className="text-right">Bus</Label>
@@ -257,6 +265,7 @@ function NewTripDialog({
   const [from, setFrom] = React.useState("");
   const [to, setTo] = React.useState("");
   const [dateTime, setDateTime] = React.useState<Date>();
+  const [time, setTime] = React.useState("00:00");
   const [busId, setBusId] = React.useState<string>();
   const [driverId, setDriverId] = React.useState<string>();
   const [ticketPrice, setTicketPrice] = React.useState<number>(0);
@@ -267,13 +276,17 @@ function NewTripDialog({
   const handleCreateTrip = () => {
     if (!from || !to || !dateTime || !busId || !driverId || !ticketPrice || !selectedBus) return;
     
+    const [hours, minutes] = time.split(':').map(Number);
+    const combinedDateTime = new Date(dateTime);
+    combinedDateTime.setHours(hours, minutes);
+
     const newTrip: Omit<Trip, "id"> = {
       from,
       to,
-      dateTime: Timestamp.fromDate(dateTime),
+      dateTime: Timestamp.fromDate(combinedDateTime),
       busId,
       driverId,
-      status: new Date(dateTime) > new Date() ? "Scheduled" : "Completed",
+      status: new Date(combinedDateTime) > new Date() ? "Scheduled" : "Completed",
       ticketPrice,
       totalSeats: selectedBus.capacity,
       bookedSeats: [],
@@ -284,6 +297,7 @@ function NewTripDialog({
     setFrom("");
     setTo("");
     setDateTime(undefined);
+    setTime("00:00");
     setBusId(undefined);
     setDriverId(undefined);
     setTicketPrice(0);
@@ -308,13 +322,13 @@ function NewTripDialog({
             <Input id="to" value={to} onChange={e => setTo(e.target.value)} className="col-span-3" />
           </div>
           <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="date" className="text-right">Date</Label>
+            <Label htmlFor="date" className="text-right">Date & Time</Label>
             <Popover>
               <PopoverTrigger asChild>
                 <Button
                   variant={"outline"}
                   className={cn(
-                    "col-span-3 justify-start text-left font-normal",
+                    "col-span-2 justify-start text-left font-normal",
                     !dateTime && "text-muted-foreground"
                   )}
                 >
@@ -326,6 +340,7 @@ function NewTripDialog({
                 <Calendar mode="single" selected={dateTime} onSelect={setDateTime} initialFocus />
               </PopoverContent>
             </Popover>
+            <Input type="time" value={time} onChange={(e) => setTime(e.target.value)} className="col-span-1" />
           </div>
           <div className="grid grid-cols-4 items-center gap-4">
             <Label htmlFor="bus" className="text-right">Bus</Label>
