@@ -69,9 +69,19 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
 import type { Trip, Bus, Employee, TripStatus } from "@/lib/types";
-import { useFirestore, useCollection, useMemoFirebase, addDocumentNonBlocking, updateDocumentNonBlocking } from "@/firebase";
+import { useFirestore, useCollection, useMemoFirebase, addDocumentNonBlocking, updateDocumentNonBlocking, deleteDocumentNonBlocking } from "@/firebase";
 
 const tripStatuses: TripStatus[] = ["Scheduled", "In Progress", "Completed", "Cancelled"];
 
@@ -166,7 +176,7 @@ function EditTripDialog({
                                     )}
                                 >
                                     <CalendarIcon className="mr-2 h-4 w-4" />
-                                    {dateTime ? format(dateTime, "PPP") : <span>Pick a date</span>}
+                                    {dateTime ? format(dateTime, "PPP", { locale: require('date-fns/locale/en-US') }) : <span>Pick a date</span>}
                                 </Button>
                             </PopoverTrigger>
                             <PopoverContent className="w-auto p-0">
@@ -308,7 +318,7 @@ function NewTripDialog({
                   )}
                 >
                   <CalendarIcon className="mr-2 h-4 w-4" />
-                  {dateTime ? format(dateTime, "PPP") : <span>Pick a date</span>}
+                  {dateTime ? format(dateTime, "PPP", { locale: require('date-fns/locale/en-US') }) : <span>Pick a date</span>}
                 </Button>
               </PopoverTrigger>
               <PopoverContent className="w-auto p-0">
@@ -377,6 +387,7 @@ export default function TripsPage() {
   const [rowSelection, setRowSelection] = React.useState({});
   const [isNewTripDialogOpen, setIsNewTripDialogOpen] = React.useState(false);
   const [isEditTripDialogOpen, setIsEditTripDialogOpen] = React.useState(false);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = React.useState(false);
   const [selectedTrip, setSelectedTrip] = React.useState<Trip | null>(null);
 
   const drivers = React.useMemo(() => employees?.filter(e => e.role === "Driver") ?? [], [employees]);
@@ -384,6 +395,19 @@ export default function TripsPage() {
   const openEditDialog = (trip: Trip) => {
     setSelectedTrip(trip);
     setIsEditTripDialogOpen(true);
+  };
+
+  const openDeleteDialog = (trip: Trip) => {
+    setSelectedTrip(trip);
+    setIsDeleteDialogOpen(true);
+  };
+
+  const handleDeleteTrip = () => {
+    if (!selectedTrip) return;
+    const tripRef = doc(firestore, "trips", selectedTrip.id);
+    deleteDocumentNonBlocking(tripRef);
+    setIsDeleteDialogOpen(false);
+    setSelectedTrip(null);
   };
 
   const columns: ColumnDef<Trip>[] = [
@@ -494,7 +518,12 @@ export default function TripsPage() {
               <DropdownMenuSeparator />
               <DropdownMenuItem>View Details</DropdownMenuItem>
               <DropdownMenuItem onClick={() => openEditDialog(trip)}>Edit Trip</DropdownMenuItem>
-               <DropdownMenuItem className="text-destructive focus:bg-destructive/10 focus:text-destructive">Delete Trip</DropdownMenuItem>
+               <DropdownMenuItem 
+                className="text-destructive focus:bg-destructive/10 focus:text-destructive"
+                onClick={() => openDeleteDialog(trip)}
+               >
+                Delete Trip
+               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         );
@@ -691,6 +720,20 @@ export default function TripsPage() {
         buses={buses ?? []}
         drivers={drivers}
       />
+       <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete this trip.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setSelectedTrip(null)}>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeleteTrip}>Delete</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }
