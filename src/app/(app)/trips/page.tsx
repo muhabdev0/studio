@@ -21,6 +21,7 @@ import {
 import { PlusCircle } from "lucide-react";
 import { Calendar as CalendarIcon } from "lucide-react";
 import { format } from "date-fns";
+import { enUS } from 'date-fns/locale';
 import { collection, Timestamp, doc } from "firebase/firestore";
 
 import { Button } from "@/components/ui/button";
@@ -176,7 +177,7 @@ function EditTripDialog({
                                     )}
                                 >
                                     <CalendarIcon className="mr-2 h-4 w-4" />
-                                    {dateTime ? format(dateTime, "PPP", { locale: require('date-fns/locale/en-US') }) : <span>Pick a date</span>}
+                                    {dateTime ? format(dateTime, "PPP", { locale: enUS }) : <span>Pick a date</span>}
                                 </Button>
                             </PopoverTrigger>
                             <PopoverContent className="w-auto p-0">
@@ -318,7 +319,7 @@ function NewTripDialog({
                   )}
                 >
                   <CalendarIcon className="mr-2 h-4 w-4" />
-                  {dateTime ? format(dateTime, "PPP", { locale: require('date-fns/locale/en-US') }) : <span>Pick a date</span>}
+                  {dateTime ? format(dateTime, "PPP", { locale: enUS }) : <span>Pick a date</span>}
                 </Button>
               </PopoverTrigger>
               <PopoverContent className="w-auto p-0">
