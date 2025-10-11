@@ -35,7 +35,7 @@ export function OverviewChart({ financeData, isLoading }: OverviewChartProps) {
     if (!financeData) return [];
     
     const monthlyData = Array.from({ length: 12 }, (_, i) => ({
-      name: new Date(0, i).toLocaleString('default', { month: 'short' }),
+      name: new Date(0, i).toLocaleString('en-US', { month: 'short' }),
       income: 0,
       expense: 0,
     }));

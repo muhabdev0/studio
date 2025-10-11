@@ -120,7 +120,7 @@ export const columns: ColumnDef<FinanceRecord>[] = [
     },
     cell: ({ row }) => {
       const timestamp = row.getValue("date") as Timestamp;
-      return <div>{timestamp.toDate().toLocaleDateString()}</div>;
+      return <div>{timestamp.toDate().toLocaleDateString('en-US')}</div>;
     },
   },
   {

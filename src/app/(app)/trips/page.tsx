@@ -123,7 +123,7 @@ export const columns: ColumnDef<Trip>[] = [
     },
     cell: ({ row }) => {
       const timestamp = row.getValue("dateTime") as Timestamp;
-      return <div>{timestamp.toDate().toLocaleString()}</div>
+      return <div>{timestamp.toDate().toLocaleString('en-US')}</div>
     },
   },
   {

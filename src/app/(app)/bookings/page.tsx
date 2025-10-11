@@ -178,7 +178,7 @@ function EditBookingDialog({
                         <SelectContent>
                             {trips.filter(t => t.status === "Scheduled").map((trip) => (
                             <SelectItem key={trip.id} value={trip.id}>
-                                {trip.from} to {trip.to} ({trip.dateTime.toDate().toLocaleDateString()})
+                                {trip.from} to {trip.to} ({trip.dateTime.toDate().toLocaleDateString('en-US')})
                             </SelectItem>
                             ))}
                         </SelectContent>
@@ -385,7 +385,7 @@ export default function BookingsPage() {
       header: "Booking Date",
       cell: ({ row }) => {
           const timestamp = row.getValue("bookingDate") as Timestamp;
-          return <div>{timestamp.toDate().toLocaleDateString()}</div>
+          return <div>{timestamp.toDate().toLocaleDateString('en-US')}</div>
       },
     },
     {
@@ -701,7 +701,7 @@ function NewBookingDialog({
               <SelectContent>
                 {trips.filter(t => t.status === "Scheduled").map((trip) => (
                   <SelectItem key={trip.id} value={trip.id}>
-                    {trip.from} to {trip.to} ({trip.dateTime.toDate().toLocaleDateString()})
+                    {trip.from} to {trip.to} ({trip.dateTime.toDate().toLocaleDateString('en-US')})
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -712,7 +712,7 @@ function NewBookingDialog({
                <div className="grid grid-cols-4 items-center gap-4">
                 <Label className="text-right">Trip Date</Label>
                 <div className="col-span-3 font-medium">
-                  {selectedTrip.dateTime.toDate().toLocaleString()}
+                  {selectedTrip.dateTime.toDate().toLocaleString('en-US')}
                 </div>
               </div>
               <div className="grid grid-cols-4 items-center gap-4">
@@ -748,5 +748,3 @@ function NewBookingDialog({
     </Dialog>
   );
 }
-
-    
