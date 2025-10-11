@@ -42,6 +42,16 @@ import {
 } from "@/components/ui/select";
 import type { Bus } from "@/lib/types";
 import { useFirestore, useCollection, useMemoFirebase, deleteDocumentNonBlocking, addDocumentNonBlocking, updateDocumentNonBlocking } from "@/firebase";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 const maintenanceStatuses: Bus["maintenanceStatus"][] = ["Operational", "Maintenance", "Out of Service"];
 
@@ -192,13 +202,15 @@ export default function BusesPage() {
   
   const [isNewBusDialogOpen, setIsNewBusDialogOpen] = React.useState(false);
   const [isEditBusDialogOpen, setIsEditBusDialogOpen] = React.useState(false);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = React.useState(false);
   const [selectedBus, setSelectedBus] = React.useState<Bus | null>(null);
 
-  const handleDelete = (busId: string) => {
-    if (window.confirm("Are you sure you want to delete this bus?")) {
-      const busRef = doc(firestore, "buses", busId);
-      deleteDocumentNonBlocking(busRef);
-    }
+  const handleDelete = () => {
+    if (!selectedBus) return;
+    const busRef = doc(firestore, "buses", selectedBus.id);
+    deleteDocumentNonBlocking(busRef);
+    setIsDeleteDialogOpen(false);
+    setSelectedBus(null);
   };
 
   const handleBusCreated = (newBus: Partial<Bus>) => {
@@ -216,6 +228,12 @@ export default function BusesPage() {
       setSelectedBus(bus);
       setIsEditBusDialogOpen(true);
   };
+  
+  const openDeleteDialog = (bus: Bus) => {
+    setSelectedBus(bus);
+    setIsDeleteDialogOpen(true);
+  };
+
 
   return (
     <>
@@ -285,7 +303,7 @@ export default function BusesPage() {
                       </DropdownMenuItem>
                       <DropdownMenuItem 
                         className="text-destructive focus:bg-destructive/10 focus:text-destructive"
-                        onClick={() => handleDelete(bus.id)}
+                        onClick={() => openDeleteDialog(bus)}
                       >
                           <Trash2 className="mr-2 h-4 w-4" />
                           Delete Bus
@@ -320,6 +338,20 @@ export default function BusesPage() {
         onSave={handleBusUpdated}
         bus={selectedBus}
       />
+      <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete this bus from your records.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setSelectedBus(null)}>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDelete}>Delete</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }
