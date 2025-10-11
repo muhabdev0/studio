@@ -29,6 +29,8 @@ export interface Employee {
   profilePhotoUrl?: string;
 }
 
+export type TripStatus = "Scheduled" | "In Progress" | "Completed" | "Cancelled";
+
 export interface Trip {
   id: string;
   from: string;
@@ -39,7 +41,7 @@ export interface Trip {
   ticketPrice: number;
   totalSeats: number;
   bookedSeats: number[];
-  status: "Scheduled" | "In Progress" | "Completed" | "Cancelled";
+  status: TripStatus;
 }
 
 export interface TicketBooking {

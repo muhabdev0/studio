@@ -21,7 +21,7 @@ import {
 import { PlusCircle } from "lucide-react";
 import { Calendar as CalendarIcon } from "lucide-react";
 import { format } from "date-fns";
-import { collection, Timestamp } from "firebase/firestore";
+import { collection, Timestamp, doc } from "firebase/firestore";
 
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -70,116 +70,165 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
-import type { Trip, Bus, Employee } from "@/lib/types";
-import { useFirestore, useCollection, useMemoFirebase, addDocumentNonBlocking } from "@/firebase";
+import type { Trip, Bus, Employee, TripStatus } from "@/lib/types";
+import { useFirestore, useCollection, useMemoFirebase, addDocumentNonBlocking, updateDocumentNonBlocking } from "@/firebase";
 
-export const columns: ColumnDef<Trip>[] = [
-  {
-    id: "select",
-    header: ({ table }) => (
-      <Checkbox
-        checked={
-          table.getIsAllPageRowsSelected() ||
-          (table.getIsSomePageRowsSelected() && "indeterminate")
+const tripStatuses: TripStatus[] = ["Scheduled", "In Progress", "Completed", "Cancelled"];
+
+function EditTripDialog({ 
+    open, 
+    onOpenChange, 
+    trip, 
+    onTripUpdated,
+    buses,
+    drivers
+}: { 
+    open: boolean; 
+    onOpenChange: (open: boolean) => void; 
+    trip: Trip | null; 
+    onTripUpdated: (tripId: string, updatedData: Partial<Trip>) => void;
+    buses: Bus[];
+    drivers: Employee[];
+}) {
+    const [from, setFrom] = React.useState("");
+    const [to, setTo] = React.useState("");
+    const [dateTime, setDateTime] = React.useState<Date>();
+    const [busId, setBusId] = React.useState<string>();
+    const [driverId, setDriverId] = React.useState<string>();
+    const [ticketPrice, setTicketPrice] = React.useState<number>(0);
+    const [status, setStatus] = React.useState<TripStatus>("Scheduled");
+
+    const availableDrivers = drivers.filter(d => d.role === "Driver");
+
+    React.useEffect(() => {
+        if (trip) {
+            setFrom(trip.from);
+            setTo(trip.to);
+            setDateTime(trip.dateTime.toDate());
+            setBusId(trip.busId);
+            setDriverId(trip.driverId);
+            setTicketPrice(trip.ticketPrice);
+            setStatus(trip.status);
         }
-        onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
-        aria-label="Select all"
-      />
-    ),
-    cell: ({ row }) => (
-      <Checkbox
-        checked={row.getIsSelected()}
-        onCheckedChange={(value) => row.toggleSelected(!!value)}
-        aria-label="Select row"
-      />
-    ),
-    enableSorting: false,
-    enableHiding: false,
-  },
-  {
-    accessorKey: "id",
-    header: "Trip ID",
-  },
-  {
-    accessorKey: "route",
-    header: "Route",
-    cell: ({ row }) => {
-      const trip = row.original;
-      return `${trip.from} → ${trip.to}`;
-    },
-  },
-  {
-    accessorKey: "dateTime",
-    header: ({ column }) => {
-      return (
-        <Button
-          variant="ghost"
-          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-        >
-          Date/Time
-          <CaretSortIcon className="ml-2 h-4 w-4" />
-        </Button>
-      );
-    },
-    cell: ({ row }) => {
-      const timestamp = row.getValue("dateTime") as Timestamp;
-      return <div>{timestamp.toDate().toLocaleString('en-US')}</div>
-    },
-  },
-  {
-    accessorKey: "busId",
-    header: "Bus",
-  },
-  {
-    accessorKey: "driverId",
-    header: "Driver",
-  },
-  {
-    accessorKey: "status",
-    header: "Status",
-    cell: ({ row }) => {
-      const status = row.getValue("status") as string;
-      const variant =
-        {
-          Scheduled: "secondary",
-          "In Progress": "default",
-          Completed: "outline",
-          Cancelled: "destructive",
-        }[status] ?? ("default" as "default" | "secondary" | "destructive" | "outline");
-      return <Badge variant={variant}>{status}</Badge>;
-    },
-  },
-  {
-    id: "actions",
-    enableHiding: false,
-    cell: ({ row }) => {
-      const trip = row.original;
+    }, [trip]);
 
-      return (
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" className="h-8 w-8 p-0">
-              <span className="sr-only">Open menu</span>
-              <DotsHorizontalIcon className="h-4 w-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuLabel>Actions</DropdownMenuLabel>
-            <DropdownMenuItem
-              onClick={() => navigator.clipboard.writeText(trip.id)}
-            >
-              Copy Trip ID
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem>View Details</DropdownMenuItem>
-            <DropdownMenuItem>Edit Trip</DropdownMenuItem>
-             <DropdownMenuItem className="text-destructive focus:bg-destructive/10 focus:text-destructive">Delete Trip</DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      );
-    },
-  },
-];
+    const handleUpdateTrip = () => {
+        if (!trip || !from || !to || !dateTime || !busId || !driverId || !ticketPrice) return;
+
+        const updatedData: Partial<Trip> = {
+            from,
+            to,
+            dateTime: Timestamp.fromDate(dateTime),
+            busId,
+            driverId,
+            ticketPrice,
+            status,
+        };
+
+        const selectedBus = buses.find(b => b.id === busId);
+        if (selectedBus && selectedBus.capacity !== trip.totalSeats) {
+            updatedData.totalSeats = selectedBus.capacity;
+        }
+
+        onTripUpdated(trip.id, updatedData);
+        onOpenChange(false);
+    };
+
+    if (!trip) return null;
+
+    return (
+        <Dialog open={open} onOpenChange={onOpenChange}>
+            <DialogContent className="sm:max-w-[425px]">
+                <DialogHeader>
+                    <DialogTitle>Edit Trip</DialogTitle>
+                    <DialogDescription>
+                        Update the details of the trip. Click save when you're done.
+                    </DialogDescription>
+                </DialogHeader>
+                <div className="grid gap-4 py-4">
+                    <div className="grid grid-cols-4 items-center gap-4">
+                        <Label htmlFor="from" className="text-right">From</Label>
+                        <Input id="from" value={from} onChange={e => setFrom(e.target.value)} className="col-span-3" />
+                    </div>
+                    <div className="grid grid-cols-4 items-center gap-4">
+                        <Label htmlFor="to" className="text-right">To</Label>
+                        <Input id="to" value={to} onChange={e => setTo(e.target.value)} className="col-span-3" />
+                    </div>
+                    <div className="grid grid-cols-4 items-center gap-4">
+                        <Label htmlFor="date" className="text-right">Date</Label>
+                        <Popover>
+                            <PopoverTrigger asChild>
+                                <Button
+                                    variant={"outline"}
+                                    className={cn(
+                                        "col-span-3 justify-start text-left font-normal",
+                                        !dateTime && "text-muted-foreground"
+                                    )}
+                                >
+                                    <CalendarIcon className="mr-2 h-4 w-4" />
+                                    {dateTime ? format(dateTime, "PPP") : <span>Pick a date</span>}
+                                </Button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-auto p-0">
+                                <Calendar mode="single" selected={dateTime} onSelect={setDateTime} initialFocus />
+                            </PopoverContent>
+                        </Popover>
+                    </div>
+                    <div className="grid grid-cols-4 items-center gap-4">
+                        <Label htmlFor="bus" className="text-right">Bus</Label>
+                        <Select value={busId} onValueChange={setBusId}>
+                            <SelectTrigger className="col-span-3">
+                                <SelectValue placeholder="Select a bus" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {buses.filter(b => b.maintenanceStatus === "Operational" || b.id === trip.busId).map(bus => (
+                                    <SelectItem key={bus.id} value={bus.id}>
+                                        {bus.name} ({bus.plateNumber})
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </div>
+                    <div className="grid grid-cols-4 items-center gap-4">
+                        <Label htmlFor="driver" className="text-right">Driver</Label>
+                        <Select value={driverId} onValueChange={setDriverId}>
+                            <SelectTrigger className="col-span-3">
+                                <SelectValue placeholder="Select a driver" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {availableDrivers.map(driver => (
+                                    <SelectItem key={driver.id} value={driver.id}>
+                                        {driver.fullName}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </div>
+                    <div className="grid grid-cols-4 items-center gap-4">
+                        <Label htmlFor="price" className="text-right">Ticket Price</Label>
+                        <Input id="price" type="number" value={ticketPrice} onChange={e => setTicketPrice(Number(e.target.value))} className="col-span-3" />
+                    </div>
+                    <div className="grid grid-cols-4 items-center gap-4">
+                        <Label htmlFor="status" className="text-right">Status</Label>
+                        <Select value={status} onValueChange={(value) => setStatus(value as TripStatus)}>
+                            <SelectTrigger className="col-span-3">
+                                <SelectValue placeholder="Select status" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {tripStatuses.map(s => (
+                                    <SelectItem key={s} value={s}>{s}</SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </div>
+                </div>
+                <DialogFooter>
+                    <Button onClick={handleUpdateTrip}>Save Changes</Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    );
+}
 
 function NewTripDialog({ 
     open, 
@@ -327,6 +376,132 @@ export default function TripsPage() {
   const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({});
   const [rowSelection, setRowSelection] = React.useState({});
   const [isNewTripDialogOpen, setIsNewTripDialogOpen] = React.useState(false);
+  const [isEditTripDialogOpen, setIsEditTripDialogOpen] = React.useState(false);
+  const [selectedTrip, setSelectedTrip] = React.useState<Trip | null>(null);
+
+  const drivers = React.useMemo(() => employees?.filter(e => e.role === "Driver") ?? [], [employees]);
+
+  const openEditDialog = (trip: Trip) => {
+    setSelectedTrip(trip);
+    setIsEditTripDialogOpen(true);
+  };
+
+  const columns: ColumnDef<Trip>[] = [
+    {
+      id: "select",
+      header: ({ table }) => (
+        <Checkbox
+          checked={
+            table.getIsAllPageRowsSelected() ||
+            (table.getIsSomePageRowsSelected() && "indeterminate")
+          }
+          onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
+          aria-label="Select all"
+        />
+      ),
+      cell: ({ row }) => (
+        <Checkbox
+          checked={row.getIsSelected()}
+          onCheckedChange={(value) => row.toggleSelected(!!value)}
+          aria-label="Select row"
+        />
+      ),
+      enableSorting: false,
+      enableHiding: false,
+    },
+    {
+      accessorKey: "id",
+      header: "Trip ID",
+    },
+    {
+      accessorKey: "route",
+      header: "Route",
+      cell: ({ row }) => {
+        const trip = row.original;
+        return `${trip.from} → ${trip.to}`;
+      },
+    },
+    {
+      accessorKey: "dateTime",
+      header: ({ column }) => {
+        return (
+          <Button
+            variant="ghost"
+            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+          >
+            Date/Time
+            <CaretSortIcon className="ml-2 h-4 w-4" />
+          </Button>
+        );
+      },
+      cell: ({ row }) => {
+        const timestamp = row.getValue("dateTime") as Timestamp;
+        return <div>{timestamp.toDate().toLocaleString('en-US')}</div>
+      },
+    },
+    {
+      accessorKey: "busId",
+      header: "Bus",
+      cell: ({ row }) => {
+        const bus = buses?.find(b => b.id === row.original.busId);
+        return bus?.name ?? row.original.busId;
+      }
+    },
+    {
+      accessorKey: "driverId",
+      header: "Driver",
+      cell: ({ row }) => {
+        const driver = drivers?.find(d => d.id === row.original.driverId);
+        return driver?.fullName ?? row.original.driverId;
+      }
+    },
+    {
+      accessorKey: "status",
+      header: "Status",
+      cell: ({ row }) => {
+        const status = row.getValue("status") as string;
+        const variant =
+          {
+            Scheduled: "secondary",
+            "In Progress": "default",
+            Completed: "outline",
+            Cancelled: "destructive",
+          }[status] ?? ("default" as "default" | "secondary" | "destructive" | "outline");
+        return <Badge variant={variant}>{status}</Badge>;
+      },
+    },
+    {
+      id: "actions",
+      enableHiding: false,
+      cell: ({ row }) => {
+        const trip = row.original;
+  
+        return (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" className="h-8 w-8 p-0">
+                <span className="sr-only">Open menu</span>
+                <DotsHorizontalIcon className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuLabel>Actions</DropdownMenuLabel>
+              <DropdownMenuItem
+                onClick={() => navigator.clipboard.writeText(trip.id)}
+              >
+                Copy Trip ID
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem>View Details</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => openEditDialog(trip)}>Edit Trip</DropdownMenuItem>
+               <DropdownMenuItem className="text-destructive focus:bg-destructive/10 focus:text-destructive">Delete Trip</DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        );
+      },
+    },
+  ];
+
 
   const table = useReactTable({
     data: trips ?? [],
@@ -350,6 +525,11 @@ export default function TripsPage() {
   const handleAddTrip = (newTrip: Omit<Trip, "id">) => {
     const tripsCollection = collection(firestore, 'trips');
     addDocumentNonBlocking(tripsCollection, newTrip);
+  };
+  
+  const handleTripUpdated = (tripId: string, updatedData: Partial<Trip>) => {
+    const tripRef = doc(firestore, 'trips', tripId);
+    updateDocumentNonBlocking(tripRef, updatedData);
   };
   
   const isLoading = isLoadingTrips || isLoadingBuses || isLoadingEmployees;
@@ -502,6 +682,14 @@ export default function TripsPage() {
         onAddTrip={handleAddTrip}
         buses={buses ?? []}
         drivers={employees ?? []}
+      />
+      <EditTripDialog
+        open={isEditTripDialogOpen}
+        onOpenChange={setIsEditTripDialogOpen}
+        trip={selectedTrip}
+        onTripUpdated={handleTripUpdated}
+        buses={buses ?? []}
+        drivers={drivers}
       />
     </>
   );
