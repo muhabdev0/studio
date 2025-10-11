@@ -19,7 +19,7 @@ import {
   useReactTable,
 } from "@tanstack/react-table";
 import { PlusCircle } from "lucide-react";
-import { collection, Timestamp, doc, updateDoc } from "firebase/firestore";
+import { collection, Timestamp, doc, updateDoc, arrayRemove } from "firebase/firestore";
 
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -65,255 +65,95 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import type { Trip, TicketBooking } from "@/lib/types";
-import { useFirestore, useCollection, useMemoFirebase, addDocumentNonBlocking } from "@/firebase";
+import { useFirestore, useCollection, useMemoFirebase, addDocumentNonBlocking, deleteDocumentNonBlocking, updateDocumentNonBlocking } from "@/firebase";
 
-export const columns: ColumnDef<TicketBooking>[] = [
-  {
-    id: "select",
-    header: ({ table }) => (
-      <Checkbox
-        checked={
-          table.getIsAllPageRowsSelected() ||
-          (table.getIsSomePageRowsSelected() && "indeterminate")
-        }
-        onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
-        aria-label="Select all"
-      />
-    ),
-    cell: ({ row }) => (
-      <Checkbox
-        checked={row.getIsSelected()}
-        onCheckedChange={(value) => row.toggleSelected(!!value)}
-        aria-label="Select row"
-      />
-    ),
-    enableSorting: false,
-    enableHiding: false,
-  },
-  {
-    accessorKey: "customerName",
-    header: ({ column }) => {
-      return (
-        <Button
-          variant="ghost"
-          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-        >
-          Customer
-          <CaretSortIcon className="ml-2 h-4 w-4" />
-        </Button>
-      );
-    },
-    cell: ({ row }) => <div>{row.getValue("customerName")}</div>,
-  },
-    {
-    accessorKey: "idNumber",
-    header: "ID Number",
-  },
-  {
-    accessorKey: "tripId",
-    header: "Trip ID",
-  },
-  {
-    accessorKey: "seatNumber",
-    header: "Seat",
-  },
-  {
-    accessorKey: "price",
-    header: () => <div className="text-right">Price</div>,
-    cell: ({ row }) => {
-      const amount = parseFloat(row.getValue("price"));
-      const formatted = new Intl.NumberFormat("en-US", {
-        style: "currency",
-        currency: "USD",
-      }).format(amount);
-
-      return <div className="text-right font-medium">{formatted}</div>;
-    },
-  },
-    {
-    accessorKey: "status",
-    header: "Status",
-    cell: ({ row }) => {
-      const status = row.getValue("status") as string;
-      const variant = {
-        "Confirmed": "default",
-        "Pending": "secondary",
-        "Cancelled": "destructive",
-      }[status] ?? "outline" as "default" | "secondary" | "destructive" | "outline";
-      return <Badge variant={variant}>{status}</Badge>;
-    },
-  },
-  {
-    accessorKey: "bookingDate",
-    header: "Booking Date",
-    cell: ({ row }) => {
-        const timestamp = row.getValue("bookingDate") as Timestamp;
-        return <div>{timestamp.toDate().toLocaleDateString()}</div>
-    },
-  },
-  {
-    id: "actions",
-    enableHiding: false,
-    cell: ({ row }) => {
-      const payment = row.original;
-
-      return (
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" className="h-8 w-8 p-0">
-              <span className="sr-only">Open menu</span>
-              <DotsHorizontalIcon className="h-4 w-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuLabel>Actions</DropdownMenuLabel>
-            <DropdownMenuItem
-              onClick={() => navigator.clipboard.writeText(payment.id)}
-            >
-              Copy Ticket ID
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem>View customer</DropdownMenuItem>
-            <DropdownMenuItem>View trip details</DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      );
-    },
-  },
-];
-
-function NewBookingDialog({ 
-    open, 
+function EditBookingDialog({
+    open,
     onOpenChange,
-    trips,
-    onBookingCreated
-}: { 
-    open: boolean, 
-    onOpenChange: (open: boolean) => void,
-    trips: Trip[],
-    onBookingCreated: (booking: Omit<TicketBooking, "id">) => void
+    booking,
+    onBookingUpdated,
+}: {
+    open: boolean;
+    onOpenChange: (open: boolean) => void;
+    booking: TicketBooking | null;
+    onBookingUpdated: (bookingId: string, updatedData: Partial<TicketBooking>) => void;
 }) {
-  const [customerName, setCustomerName] = React.useState("");
-  const [idNumber, setIdNumber] = React.useState("");
-  const [selectedTripId, setSelectedTripId] = React.useState<string | undefined>();
-  const [selectedSeat, setSelectedSeat] = React.useState<number | undefined>();
-  
-  const selectedTrip = trips.find(t => t.id === selectedTripId);
+    const [customerName, setCustomerName] = React.useState("");
+    const [idNumber, setIdNumber] = React.useState("");
 
-  const availableSeats = React.useMemo(() => {
-    if (!selectedTrip) return [];
-    const booked = selectedTrip.bookedSeats || [];
-    const allSeats = Array.from({ length: selectedTrip.totalSeats }, (_, i) => i + 1);
-    return allSeats.filter(seat => !booked.includes(seat));
-  }, [selectedTrip]);
+    React.useEffect(() => {
+        if (booking) {
+            setCustomerName(booking.customerName);
+            setIdNumber(booking.idNumber);
+        }
+    }, [booking]);
 
-  const handleCreateBooking = () => {
-    if (!customerName || !idNumber || !selectedTrip || !selectedSeat) return;
+    const handleUpdateBooking = () => {
+        if (!booking) return;
 
-    const newBooking: Omit<TicketBooking, "id"> = {
-        tripId: selectedTrip.id,
-        customerName,
-        idNumber,
-        seatNumber: selectedSeat,
-        price: selectedTrip.ticketPrice,
-        bookingDate: Timestamp.now(),
-        status: "Confirmed",
+        const updatedData: Partial<TicketBooking> = {
+            customerName,
+            idNumber,
+        };
+        onBookingUpdated(booking.id, updatedData);
+        onOpenChange(false);
     };
-    onBookingCreated(newBooking);
-    onOpenChange(false);
-    // Reset form
-    setCustomerName("");
-    setIdNumber("");
-    setSelectedTripId(undefined);
-    setSelectedSeat(undefined);
-  };
 
+    if (!booking) return null;
 
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[425px]">
-        <DialogHeader>
-          <DialogTitle>Create New Booking</DialogTitle>
-          <DialogDescription>
-            Book a new trip for a customer.
-          </DialogDescription>
-        </DialogHeader>
-        <div className="grid gap-4 py-4">
-          <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="customerName" className="text-right">
-              Customer Name
-            </Label>
-            <Input id="customerName" value={customerName} onChange={e => setCustomerName(e.target.value)} className="col-span-3" />
-          </div>
-          <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="idNumber" className="text-right">
-              ID Number
-            </Label>
-            <Input id="idNumber" value={idNumber} onChange={e => setIdNumber(e.target.value)} className="col-span-3" />
-          </div>
-          <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="trip" className="text-right">
-              Trip
-            </Label>
-            <Select onValueChange={setSelectedTripId}>
-              <SelectTrigger className="col-span-3">
-                <SelectValue placeholder="Select a trip" />
-              </SelectTrigger>
-              <SelectContent>
-                {trips.filter(t => t.status === "Scheduled").map((trip) => (
-                  <SelectItem key={trip.id} value={trip.id}>
-                    {trip.from} to {trip.to} ({trip.dateTime.toDate().toLocaleDateString()})
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          {selectedTrip && (
-            <>
-               <div className="grid grid-cols-4 items-center gap-4">
-                <Label className="text-right">Trip Date</Label>
-                <div className="col-span-3 font-medium">
-                  {selectedTrip.dateTime.toDate().toLocaleString()}
+    return (
+        <Dialog open={open} onOpenChange={onOpenChange}>
+            <DialogContent className="sm:max-w-[425px]">
+                <DialogHeader>
+                    <DialogTitle>Edit Booking</DialogTitle>
+                    <DialogDescription>
+                        Update the customer's booking details.
+                    </DialogDescription>
+                </DialogHeader>
+                <div className="grid gap-4 py-4">
+                    <div className="grid grid-cols-4 items-center gap-4">
+                        <Label htmlFor="customerName" className="text-right">
+                            Customer Name
+                        </Label>
+                        <Input id="customerName" value={customerName} onChange={e => setCustomerName(e.target.value)} className="col-span-3" />
+                    </div>
+                    <div className="grid grid-cols-4 items-center gap-4">
+                        <Label htmlFor="idNumber" className="text-right">
+                            ID Number
+                        </Label>
+                        <Input id="idNumber" value={idNumber} onChange={e => setIdNumber(e.target.value)} className="col-span-3" />
+                    </div>
                 </div>
-              </div>
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="seat" className="text-right">
-                  Seat
-                </Label>
-                <Select onValueChange={(val) => setSelectedSeat(Number(val))}>
-                  <SelectTrigger className="col-span-3">
-                    <SelectValue placeholder="Select a seat" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {availableSeats.map(seat => (
-                      <SelectItem key={seat} value={String(seat)}>
-                        Seat {seat}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label className="text-right">Price</Label>
-                <div className="col-span-3 font-medium">
-                  {new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(selectedTrip.ticketPrice)}
-                </div>
-              </div>
-            </>
-          )}
-        </div>
-        <DialogFooter>
-          <Button type="submit" onClick={handleCreateBooking}>Create Booking</Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
+                <DialogFooter>
+                    <Button type="submit" onClick={handleUpdateBooking}>Save Changes</Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    );
 }
-
 
 export default function BookingsPage() {
   const firestore = useFirestore();
+
+  const [sorting, setSorting] = React.useState<SortingState>([]);
+  const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([]);
+  const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({});
+  const [rowSelection, setRowSelection] = React.useState({});
+  const [isNewBookingDialogOpen, setIsNewBookingDialogOpen] = React.useState(false);
+  const [isEditBookingDialogOpen, setIsEditBookingDialogOpen] = React.useState(false);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = React.useState(false);
+  const [selectedBooking, setSelectedBooking] = React.useState<TicketBooking | null>(null);
 
   const bookingsQuery = useMemoFirebase(() => collection(firestore, "ticketBookings"), [firestore]);
   const { data: bookingsData, isLoading: isLoadingBookings } = useCollection<TicketBooking>(bookingsQuery);
@@ -321,15 +161,173 @@ export default function BookingsPage() {
   const tripsQuery = useMemoFirebase(() => collection(firestore, "trips"), [firestore]);
   const { data: tripsData, isLoading: isLoadingTrips } = useCollection<Trip>(tripsQuery);
 
-  const [sorting, setSorting] = React.useState<SortingState>([]);
-  const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>(
-    []
-  );
-  const [columnVisibility, setColumnVisibility] =
-    React.useState<VisibilityState>({});
-  const [rowSelection, setRowSelection] = React.useState({});
-  const [isNewBookingDialogOpen, setIsNewBookingDialogOpen] = React.useState(false);
+  const handleBookingCreated = (newBooking: Omit<TicketBooking, "id">) => {
+    const bookingsCollection = collection(firestore, 'ticketBookings');
+    addDocumentNonBlocking(bookingsCollection, newBooking)
+      .then(docRef => {
+        if (docRef) {
+          const tripRef = doc(firestore, 'trips', newBooking.tripId);
+          const trip = tripsData?.find(t => t.id === newBooking.tripId);
+          if (trip) {
+            const updatedBookedSeats = [...(trip.bookedSeats || []), newBooking.seatNumber];
+            updateDoc(tripRef, { bookedSeats: updatedBookedSeats });
+          }
+        }
+      });
+  };
 
+  const handleBookingUpdated = (bookingId: string, updatedData: Partial<TicketBooking>) => {
+    const bookingRef = doc(firestore, 'ticketBookings', bookingId);
+    updateDocumentNonBlocking(bookingRef, updatedData);
+  };
+
+  const handleDeleteBooking = () => {
+    if (!selectedBooking) return;
+    const bookingRef = doc(firestore, "ticketBookings", selectedBooking.id);
+    deleteDocumentNonBlocking(bookingRef);
+
+    // Free up the seat on the trip
+    const tripRef = doc(firestore, 'trips', selectedBooking.tripId);
+    updateDoc(tripRef, {
+        bookedSeats: arrayRemove(selectedBooking.seatNumber)
+    });
+
+    setIsDeleteDialogOpen(false);
+    setSelectedBooking(null);
+  };
+
+  const openEditDialog = (booking: TicketBooking) => {
+    setSelectedBooking(booking);
+    setIsEditBookingDialogOpen(true);
+  };
+
+  const openDeleteDialog = (booking: TicketBooking) => {
+    setSelectedBooking(booking);
+    setIsDeleteDialogOpen(true);
+  };
+  
+  const columns: ColumnDef<TicketBooking>[] = [
+    {
+      id: "select",
+      header: ({ table }) => (
+        <Checkbox
+          checked={
+            table.getIsAllPageRowsSelected() ||
+            (table.getIsSomePageRowsSelected() && "indeterminate")
+          }
+          onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
+          aria-label="Select all"
+        />
+      ),
+      cell: ({ row }) => (
+        <Checkbox
+          checked={row.getIsSelected()}
+          onCheckedChange={(value) => row.toggleSelected(!!value)}
+          aria-label="Select row"
+        />
+      ),
+      enableSorting: false,
+      enableHiding: false,
+    },
+    {
+      accessorKey: "customerName",
+      header: ({ column }) => {
+        return (
+          <Button
+            variant="ghost"
+            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+          >
+            Customer
+            <CaretSortIcon className="ml-2 h-4 w-4" />
+          </Button>
+        );
+      },
+      cell: ({ row }) => <div>{row.getValue("customerName")}</div>,
+    },
+      {
+      accessorKey: "idNumber",
+      header: "ID Number",
+    },
+    {
+      accessorKey: "tripId",
+      header: "Trip ID",
+      cell: ({ row }) => <div className="truncate w-20">{row.getValue("tripId")}</div>
+    },
+    {
+      accessorKey: "seatNumber",
+      header: "Seat",
+    },
+    {
+      accessorKey: "price",
+      header: () => <div className="text-right">Price</div>,
+      cell: ({ row }) => {
+        const amount = parseFloat(row.getValue("price"));
+        const formatted = new Intl.NumberFormat("en-US", {
+          style: "currency",
+          currency: "USD",
+        }).format(amount);
+  
+        return <div className="text-right font-medium">{formatted}</div>;
+      },
+    },
+      {
+      accessorKey: "status",
+      header: "Status",
+      cell: ({ row }) => {
+        const status = row.getValue("status") as string;
+        const variant = {
+          "Confirmed": "default",
+          "Pending": "secondary",
+          "Cancelled": "destructive",
+        }[status] ?? "outline" as "default" | "secondary" | "destructive" | "outline";
+        return <Badge variant={variant}>{status}</Badge>;
+      },
+    },
+    {
+      accessorKey: "bookingDate",
+      header: "Booking Date",
+      cell: ({ row }) => {
+          const timestamp = row.getValue("bookingDate") as Timestamp;
+          return <div>{timestamp.toDate().toLocaleDateString()}</div>
+      },
+    },
+    {
+      id: "actions",
+      enableHiding: false,
+      cell: ({ row }) => {
+        const booking = row.original;
+  
+        return (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" className="h-8 w-8 p-0">
+                <span className="sr-only">Open menu</span>
+                <DotsHorizontalIcon className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuLabel>Actions</DropdownMenuLabel>
+              <DropdownMenuItem onClick={() => openEditDialog(booking)}>
+                Edit Booking
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                className="text-destructive focus:text-destructive"
+                onClick={() => openDeleteDialog(booking)}
+              >
+                Delete Booking
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onClick={() => navigator.clipboard.writeText(booking.id)}
+              >
+                Copy Ticket ID
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        );
+      },
+    },
+  ];
 
   const table = useReactTable({
     data: bookingsData ?? [],
@@ -349,21 +347,6 @@ export default function BookingsPage() {
       rowSelection,
     },
   });
-
-  const handleBookingCreated = (newBooking: Omit<TicketBooking, "id">) => {
-    const bookingsCollection = collection(firestore, 'ticketBookings');
-    addDocumentNonBlocking(bookingsCollection, newBooking)
-      .then(docRef => {
-        if (docRef) {
-          const tripRef = doc(firestore, 'trips', newBooking.tripId);
-          const trip = tripsData?.find(t => t.id === newBooking.tripId);
-          if (trip) {
-            const updatedBookedSeats = [...(trip.bookedSeats || []), newBooking.seatNumber];
-            updateDoc(tripRef, { bookedSeats: updatedBookedSeats });
-          }
-        }
-      });
-  }
 
   const isLoading = isLoadingBookings || isLoadingTrips;
 
@@ -515,6 +498,155 @@ export default function BookingsPage() {
         trips={tripsData ?? []}
         onBookingCreated={handleBookingCreated}
       />
+      <EditBookingDialog
+        open={isEditBookingDialogOpen}
+        onOpenChange={setIsEditBookingDialogOpen}
+        booking={selectedBooking}
+        onBookingUpdated={handleBookingUpdated}
+      />
+      <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete the booking
+              and free up the seat on the trip.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeleteBooking}>Delete</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
+  );
+}
+
+function NewBookingDialog({ 
+    open, 
+    onOpenChange,
+    trips,
+    onBookingCreated
+}: { 
+    open: boolean, 
+    onOpenChange: (open: boolean) => void,
+    trips: Trip[],
+    onBookingCreated: (booking: Omit<TicketBooking, "id" | "price"> & { price: number }) => void
+}) {
+  const [customerName, setCustomerName] = React.useState("");
+  const [idNumber, setIdNumber] = React.useState("");
+  const [selectedTripId, setSelectedTripId] = React.useState<string | undefined>();
+  const [selectedSeat, setSelectedSeat] = React.useState<number | undefined>();
+  
+  const selectedTrip = trips.find(t => t.id === selectedTripId);
+
+  const availableSeats = React.useMemo(() => {
+    if (!selectedTrip) return [];
+    const booked = selectedTrip.bookedSeats || [];
+    const allSeats = Array.from({ length: selectedTrip.totalSeats }, (_, i) => i + 1);
+    return allSeats.filter(seat => !booked.includes(seat));
+  }, [selectedTrip]);
+
+  const handleCreateBooking = () => {
+    if (!customerName || !idNumber || !selectedTrip || !selectedSeat) return;
+
+    const newBooking = {
+        tripId: selectedTrip.id,
+        customerName,
+        idNumber,
+        seatNumber: selectedSeat,
+        price: selectedTrip.ticketPrice,
+        bookingDate: Timestamp.now(),
+        status: "Confirmed" as const,
+    };
+    onBookingCreated(newBooking);
+    onOpenChange(false);
+    // Reset form
+    setCustomerName("");
+    setIdNumber("");
+    setSelectedTripId(undefined);
+    setSelectedSeat(undefined);
+  };
+
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-[425px]">
+        <DialogHeader>
+          <DialogTitle>Create New Booking</DialogTitle>
+          <DialogDescription>
+            Book a new trip for a customer.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="grid gap-4 py-4">
+          <div className="grid grid-cols-4 items-center gap-4">
+            <Label htmlFor="customerName" className="text-right">
+              Customer Name
+            </Label>
+            <Input id="customerName" value={customerName} onChange={e => setCustomerName(e.target.value)} className="col-span-3" />
+          </div>
+          <div className="grid grid-cols-4 items-center gap-4">
+            <Label htmlFor="idNumber" className="text-right">
+              ID Number
+            </Label>
+            <Input id="idNumber" value={idNumber} onChange={e => setIdNumber(e.target.value)} className="col-span-3" />
+          </div>
+          <div className="grid grid-cols-4 items-center gap-4">
+            <Label htmlFor="trip" className="text-right">
+              Trip
+            </Label>
+            <Select onValueChange={setSelectedTripId}>
+              <SelectTrigger className="col-span-3">
+                <SelectValue placeholder="Select a trip" />
+              </SelectTrigger>
+              <SelectContent>
+                {trips.filter(t => t.status === "Scheduled").map((trip) => (
+                  <SelectItem key={trip.id} value={trip.id}>
+                    {trip.from} to {trip.to} ({trip.dateTime.toDate().toLocaleDateString()})
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          {selectedTrip && (
+            <>
+               <div className="grid grid-cols-4 items-center gap-4">
+                <Label className="text-right">Trip Date</Label>
+                <div className="col-span-3 font-medium">
+                  {selectedTrip.dateTime.toDate().toLocaleString()}
+                </div>
+              </div>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="seat" className="text-right">
+                  Seat
+                </Label>
+                <Select onValueChange={(val) => setSelectedSeat(Number(val))}>
+                  <SelectTrigger className="col-span-3">
+                    <SelectValue placeholder="Select a seat" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {availableSeats.map(seat => (
+                      <SelectItem key={seat} value={String(seat)}>
+                        Seat {seat}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label className="text-right">Price</Label>
+                <div className="col-span-3 font-medium">
+                  {new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(selectedTrip.ticketPrice)}
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+        <DialogFooter>
+          <Button type="submit" onClick={handleCreateBooking}>Create Booking</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
