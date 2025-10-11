@@ -19,7 +19,7 @@ import {
   useReactTable,
 } from "@tanstack/react-table";
 import { PlusCircle } from "lucide-react";
-import { collection, Timestamp, doc, updateDoc, arrayRemove } from "firebase/firestore";
+import { collection, Timestamp, doc, updateDoc, arrayRemove, arrayUnion } from "firebase/firestore";
 
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -82,31 +82,64 @@ function EditBookingDialog({
     open,
     onOpenChange,
     booking,
+    trips,
     onBookingUpdated,
 }: {
     open: boolean;
     onOpenChange: (open: boolean) => void;
     booking: TicketBooking | null;
-    onBookingUpdated: (bookingId: string, updatedData: Partial<TicketBooking>) => void;
+    trips: Trip[];
+    onBookingUpdated: (bookingId: string, oldTripId: string, oldSeat: number, updatedData: Partial<TicketBooking>) => void;
 }) {
     const [customerName, setCustomerName] = React.useState("");
     const [idNumber, setIdNumber] = React.useState("");
+    const [selectedTripId, setSelectedTripId] = React.useState<string | undefined>();
+    const [selectedSeat, setSelectedSeat] = React.useState<number | undefined>();
+    const [status, setStatus] = React.useState<TicketBooking['status'] | undefined>();
+
+    const selectedTrip = trips.find(t => t.id === selectedTripId);
+
+    const availableSeats = React.useMemo(() => {
+        if (!selectedTrip) return [];
+        const booked = selectedTrip.bookedSeats || [];
+        const allSeats = Array.from({ length: selectedTrip.totalSeats }, (_, i) => i + 1);
+        // If we are editing a booking for the currently selected trip, the original seat is also available.
+        if (booking && booking.tripId === selectedTripId) {
+            return allSeats.filter(seat => !booked.includes(seat) || seat === booking.seatNumber);
+        }
+        return allSeats.filter(seat => !booked.includes(seat));
+    }, [selectedTrip, booking]);
 
     React.useEffect(() => {
         if (booking) {
             setCustomerName(booking.customerName);
             setIdNumber(booking.idNumber);
+            setSelectedTripId(booking.tripId);
+            setSelectedSeat(booking.seatNumber);
+            setStatus(booking.status);
         }
     }, [booking]);
+    
+    // When trip changes, if the selected seat is not available, reset it
+    React.useEffect(() => {
+        if (selectedTrip && selectedSeat && !availableSeats.includes(selectedSeat)) {
+            setSelectedSeat(undefined);
+        }
+    }, [selectedTrip, availableSeats, selectedSeat]);
+
 
     const handleUpdateBooking = () => {
-        if (!booking) return;
+        if (!booking || !customerName || !idNumber || !selectedTripId || !selectedSeat || !status) return;
 
         const updatedData: Partial<TicketBooking> = {
             customerName,
             idNumber,
+            tripId: selectedTripId,
+            seatNumber: selectedSeat,
+            status,
+            price: trips.find(t => t.id === selectedTripId)?.ticketPrice || booking.price
         };
-        onBookingUpdated(booking.id, updatedData);
+        onBookingUpdated(booking.id, booking.tripId, booking.seatNumber, updatedData);
         onOpenChange(false);
     };
 
@@ -118,7 +151,7 @@ function EditBookingDialog({
                 <DialogHeader>
                     <DialogTitle>Edit Booking</DialogTitle>
                     <DialogDescription>
-                        Update the customer's booking details.
+                        Update the customer's booking details. Click save when you're done.
                     </DialogDescription>
                 </DialogHeader>
                 <div className="grid gap-4 py-4">
@@ -133,6 +166,57 @@ function EditBookingDialog({
                             ID Number
                         </Label>
                         <Input id="idNumber" value={idNumber} onChange={e => setIdNumber(e.target.value)} className="col-span-3" />
+                    </div>
+                     <div className="grid grid-cols-4 items-center gap-4">
+                        <Label htmlFor="trip" className="text-right">
+                        Trip
+                        </Label>
+                        <Select value={selectedTripId} onValueChange={setSelectedTripId}>
+                        <SelectTrigger className="col-span-3">
+                            <SelectValue placeholder="Select a trip" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {trips.filter(t => t.status === "Scheduled").map((trip) => (
+                            <SelectItem key={trip.id} value={trip.id}>
+                                {trip.from} to {trip.to} ({trip.dateTime.toDate().toLocaleDateString()})
+                            </SelectItem>
+                            ))}
+                        </SelectContent>
+                        </Select>
+                    </div>
+                    {selectedTrip && (
+                        <div className="grid grid-cols-4 items-center gap-4">
+                            <Label htmlFor="seat" className="text-right">
+                            Seat
+                            </Label>
+                            <Select value={selectedSeat ? String(selectedSeat) : undefined} onValueChange={(val) => setSelectedSeat(Number(val))}>
+                            <SelectTrigger className="col-span-3">
+                                <SelectValue placeholder="Select a seat" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {availableSeats.map(seat => (
+                                <SelectItem key={seat} value={String(seat)}>
+                                    Seat {seat}
+                                </SelectItem>
+                                ))}
+                            </SelectContent>
+                            </Select>
+                        </div>
+                    )}
+                    <div className="grid grid-cols-4 items-center gap-4">
+                        <Label htmlFor="status" className="text-right">
+                            Status
+                        </Label>
+                        <Select value={status} onValueChange={(value) => setStatus(value as TicketBooking['status'])}>
+                        <SelectTrigger className="col-span-3">
+                            <SelectValue placeholder="Select status" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="Confirmed">Confirmed</SelectItem>
+                            <SelectItem value="Pending">Pending</SelectItem>
+                            <SelectItem value="Cancelled">Cancelled</SelectItem>
+                        </SelectContent>
+                        </Select>
                     </div>
                 </div>
                 <DialogFooter>
@@ -167,18 +251,28 @@ export default function BookingsPage() {
       .then(docRef => {
         if (docRef) {
           const tripRef = doc(firestore, 'trips', newBooking.tripId);
-          const trip = tripsData?.find(t => t.id === newBooking.tripId);
-          if (trip) {
-            const updatedBookedSeats = [...(trip.bookedSeats || []), newBooking.seatNumber];
-            updateDoc(tripRef, { bookedSeats: updatedBookedSeats });
-          }
+          updateDoc(tripRef, { bookedSeats: arrayUnion(newBooking.seatNumber) });
         }
       });
   };
 
-  const handleBookingUpdated = (bookingId: string, updatedData: Partial<TicketBooking>) => {
+  const handleBookingUpdated = (bookingId: string, oldTripId: string, oldSeat: number, updatedData: Partial<TicketBooking>) => {
     const bookingRef = doc(firestore, 'ticketBookings', bookingId);
     updateDocumentNonBlocking(bookingRef, updatedData);
+
+    const newTripId = updatedData.tripId;
+    const newSeat = updatedData.seatNumber;
+
+    // Handle seat changes
+    if (newTripId && newSeat && (newTripId !== oldTripId || newSeat !== oldSeat)) {
+        // Free up old seat
+        const oldTripRef = doc(firestore, 'trips', oldTripId);
+        updateDoc(oldTripRef, { bookedSeats: arrayRemove(oldSeat) });
+
+        // Book new seat
+        const newTripRef = doc(firestore, 'trips', newTripId);
+        updateDoc(newTripRef, { bookedSeats: arrayUnion(newSeat) });
+    }
   };
 
   const handleDeleteBooking = () => {
@@ -250,8 +344,11 @@ export default function BookingsPage() {
     },
     {
       accessorKey: "tripId",
-      header: "Trip ID",
-      cell: ({ row }) => <div className="truncate w-20">{row.getValue("tripId")}</div>
+      header: "Trip",
+      cell: ({ row }) => {
+        const trip = tripsData?.find(t => t.id === row.original.tripId);
+        return <div className="truncate w-40">{trip ? `${trip.from} to ${trip.to}` : row.original.tripId}</div>
+      }
     },
     {
       accessorKey: "seatNumber",
@@ -502,6 +599,7 @@ export default function BookingsPage() {
         open={isEditBookingDialogOpen}
         onOpenChange={setIsEditBookingDialogOpen}
         booking={selectedBooking}
+        trips={tripsData ?? []}
         onBookingUpdated={handleBookingUpdated}
       />
       <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
@@ -650,3 +748,5 @@ function NewBookingDialog({
     </Dialog>
   );
 }
+
+    
