@@ -7,7 +7,7 @@ import {
   ChevronDownIcon,
   DotsHorizontalIcon,
 } from "@radix-ui/react-icons";
-import { PlusCircle } from "lucide-react";
+import { PlusCircle, Calendar as CalendarIcon } from "lucide-react";
 import {
   ColumnDef,
   ColumnFiltersState,
@@ -23,6 +23,8 @@ import {
   getFacetedUniqueValues,
 } from "@tanstack/react-table";
 import { collection, Timestamp } from "firebase/firestore";
+import { format } from "date-fns";
+import { enUS } from 'date-fns/locale';
 
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -53,8 +55,31 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import { cn } from "@/lib/utils";
 import type { FinanceRecord } from "@/lib/types";
-import { useFirestore, useCollection, useMemoFirebase } from "@/firebase";
+import { useFirestore, useCollection, useMemoFirebase, addDocumentNonBlocking } from "@/firebase";
+
+const financeRecordTypes: FinanceRecord["type"][] = ["Income", "Expense"];
+const financeRecordCategories: FinanceRecord["category"][] = ["Ticket Sale", "Salary", "Maintenance", "Rent", "Other"];
 
 const getCategoryBadgeVariant = (category: FinanceRecord["category"]) => {
     switch(category) {
@@ -330,53 +355,177 @@ function FinanceTable({ data, isLoading }: { data: FinanceRecord[] | null, isLoa
   );
 }
 
+function NewEntryDialog({
+    open,
+    onOpenChange,
+    onEntryCreated
+} : {
+    open: boolean;
+    onOpenChange: (open: boolean) => void;
+    onEntryCreated: (entry: Omit<FinanceRecord, "id">) => void;
+}) {
+    const [type, setType] = React.useState<FinanceRecord["type"]>("Expense");
+    const [category, setCategory] = React.useState<FinanceRecord["category"]>("Other");
+    const [amount, setAmount] = React.useState<number>(0);
+    const [date, setDate] = React.useState<Date>();
+    const [description, setDescription] = React.useState("");
+
+    const handleCreateEntry = () => {
+        if (!type || !category || amount <= 0 || !date || !description) return;
+
+        const newEntry: Omit<FinanceRecord, "id"> = {
+            type,
+            category,
+            amount,
+            date: Timestamp.fromDate(date),
+            description,
+        };
+        onEntryCreated(newEntry);
+        onOpenChange(false);
+        // Reset form
+        setType("Expense");
+        setCategory("Other");
+        setAmount(0);
+        setDate(undefined);
+        setDescription("");
+    };
+
+    return (
+        <Dialog open={open} onOpenChange={onOpenChange}>
+            <DialogContent className="sm:max-w-[425px]">
+                <DialogHeader>
+                    <DialogTitle>Add New Finance Entry</DialogTitle>
+                    <DialogDescription>
+                        Enter the details for the new financial record.
+                    </DialogDescription>
+                </DialogHeader>
+                <div className="grid gap-4 py-4">
+                    <div className="grid grid-cols-4 items-center gap-4">
+                        <Label htmlFor="type" className="text-right">Type</Label>
+                        <Select onValueChange={(value) => setType(value as FinanceRecord["type"])} value={type}>
+                            <SelectTrigger className="col-span-3">
+                                <SelectValue placeholder="Select a type" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {financeRecordTypes.map((type) => (
+                                    <SelectItem key={type} value={type}>{type}</SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </div>
+                    <div className="grid grid-cols-4 items-center gap-4">
+                        <Label htmlFor="category" className="text-right">Category</Label>
+                        <Select onValueChange={(value) => setCategory(value as FinanceRecord["category"])} value={category}>
+                            <SelectTrigger className="col-span-3">
+                                <SelectValue placeholder="Select a category" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {financeRecordCategories.map((cat) => (
+                                    <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </div>
+                    <div className="grid grid-cols-4 items-center gap-4">
+                        <Label htmlFor="amount" className="text-right">Amount</Label>
+                        <Input id="amount" type="number" value={amount} onChange={e => setAmount(Number(e.target.value))} className="col-span-3" />
+                    </div>
+                    <div className="grid grid-cols-4 items-center gap-4">
+                        <Label htmlFor="date" className="text-right">Date</Label>
+                        <Popover>
+                            <PopoverTrigger asChild>
+                                <Button
+                                    variant={"outline"}
+                                    className={cn(
+                                        "col-span-3 justify-start text-left font-normal",
+                                        !date && "text-muted-foreground"
+                                    )}
+                                >
+                                    <CalendarIcon className="mr-2 h-4 w-4" />
+                                    {date ? format(date, "PPP", { locale: enUS }) : <span>Pick a date</span>}
+                                </Button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-auto p-0">
+                                <Calendar mode="single" selected={date} onSelect={setDate} initialFocus />
+                            </PopoverContent>
+                        </Popover>
+                    </div>
+                    <div className="grid grid-cols-4 items-center gap-4">
+                        <Label htmlFor="description" className="text-right">Description</Label>
+                        <Textarea id="description" value={description} onChange={e => setDescription(e.target.value)} className="col-span-3" />
+                    </div>
+                </div>
+                <DialogFooter>
+                    <Button onClick={handleCreateEntry}>Create Entry</Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    );
+}
 
 export default function FinancePage() {
   const firestore = useFirestore();
   const financeQuery = useMemoFirebase(() => collection(firestore, "financeRecords"), [firestore]);
   const { data, isLoading } = useCollection<FinanceRecord>(financeQuery);
+  
+  const [isNewEntryDialogOpen, setIsNewEntryDialogOpen] = React.useState(false);
 
   const incomeData = React.useMemo(() => data?.filter(d => d.type === 'Income'), [data]);
-  const salariesData = React.useMemo(() => data?.filter(d => d.category === 'Salary'), [data]);
-  const maintenanceData = React.useMemo(() => data?.filter(d => d.category === 'Maintenance'), [data]);
+  const expensesData = React.useMemo(() => data?.filter(d => d.type === 'Expense'), [data]);
+  const salariesData = React.useMemo(() => expensesData?.filter(d => d.category === 'Salary'), [expensesData]);
+  const maintenanceData = React.useMemo(() => expensesData?.filter(d => d.category === 'Maintenance'), [expensesData]);
+
+  const handleEntryCreated = (newEntry: Omit<FinanceRecord, "id">) => {
+    const financeCollection = collection(firestore, 'financeRecords');
+    addDocumentNonBlocking(financeCollection, newEntry);
+  };
 
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex justify-between items-center">
-            <div>
-                <CardTitle>Finance Management</CardTitle>
-                <CardDescription>
-                 Here you can track income, expenses, and view financial summaries.
-                </CardDescription>
-            </div>
-             <Button>
-                <PlusCircle className="mr-2 h-4 w-4" /> Add New Entry
-            </Button>
-        </div>
-      </CardHeader>
-      <CardContent>
-        <Tabs defaultValue="all">
-          <TabsList className="grid w-full grid-cols-4">
-            <TabsTrigger value="all">All Records</TabsTrigger>
-            <TabsTrigger value="income">Income</TabsTrigger>
-            <TabsTrigger value="salaries">Salaries</TabsTrigger>
-            <TabsTrigger value="maintenance">Maintenance</TabsTrigger>
-          </TabsList>
-          <TabsContent value="all">
-            <FinanceTable data={data} isLoading={isLoading} />
-          </TabsContent>
-          <TabsContent value="income">
-            <FinanceTable data={incomeData} isLoading={isLoading} />
-          </TabsContent>
-          <TabsContent value="salaries">
-            <FinanceTable data={salariesData} isLoading={isLoading} />
-          </TabsContent>
-          <TabsContent value="maintenance">
-            <FinanceTable data={maintenanceData} isLoading={isLoading} />
-          </TabsContent>
-        </Tabs>
-      </CardContent>
-    </Card>
+    <>
+      <Card>
+        <CardHeader>
+          <div className="flex justify-between items-center">
+              <div>
+                  <CardTitle>Finance Management</CardTitle>
+                  <CardDescription>
+                   Here you can track income, expenses, and view financial summaries.
+                  </CardDescription>
+              </div>
+               <Button onClick={() => setIsNewEntryDialogOpen(true)}>
+                  <PlusCircle className="mr-2 h-4 w-4" /> Add New Entry
+              </Button>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <Tabs defaultValue="all">
+            <TabsList className="grid w-full grid-cols-4">
+              <TabsTrigger value="all">All Records</TabsTrigger>
+              <TabsTrigger value="income">Income</TabsTrigger>
+              <TabsTrigger value="salaries">Salaries</TabsTrigger>
+              <TabsTrigger value="maintenance">Maintenance</TabsTrigger>
+            </TabsList>
+            <TabsContent value="all">
+              <FinanceTable data={data} isLoading={isLoading} />
+            </TabsContent>
+            <TabsContent value="income">
+              <FinanceTable data={incomeData} isLoading={isLoading} />
+            </TabsContent>
+            <TabsContent value="salaries">
+              <FinanceTable data={salariesData} isLoading={isLoading} />
+            </TabsContent>
+            <TabsContent value="maintenance">
+              <FinanceTable data={maintenanceData} isLoading={isLoading} />
+            </TabsContent>
+          </Tabs>
+        </CardContent>
+      </Card>
+      <NewEntryDialog
+        open={isNewEntryDialogOpen}
+        onOpenChange={setIsNewEntryDialogOpen}
+        onEntryCreated={handleEntryCreated}
+      />
+    </>
   );
 }
+
+    
