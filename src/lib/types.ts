@@ -38,7 +38,7 @@ export interface Trip {
   dateTime: Timestamp;
   busId: string;
   driverId: string;
-  ticketPrice: number;
+  price: number;
   totalSeats: number;
   bookedSeats: number[];
   status: TripStatus;

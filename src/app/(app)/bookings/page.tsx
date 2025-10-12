@@ -152,7 +152,7 @@ function EditBookingDialog({
             tripId: selectedTripId,
             seatNumber: selectedSeat,
             status,
-            price: trips.find(t => t.id === selectedTripId)?.ticketPrice || booking.price,
+            price: trips.find(t => t.id === selectedTripId)?.price || booking.price,
             customerPhotoUrl: customerPhotoUrl || `https://picsum.photos/seed/${customerName}/100/100`,
         };
         onBookingUpdated(booking.id, booking.tripId, booking.seatNumber, updatedData);
@@ -724,7 +724,7 @@ function NewBookingDialog({
         customerName,
         idNumber,
         seatNumber: selectedSeat,
-        price: selectedTrip.ticketPrice,
+        price: selectedTrip.price,
         bookingDate: Timestamp.now(),
         status: "Confirmed" as const,
         customerPhotoUrl: customerPhotoUrl || `https://picsum.photos/seed/${customerName}/100/100`,
@@ -807,7 +807,7 @@ function NewBookingDialog({
               <div className="grid grid-cols-4 items-center gap-4">
                 <Label className="text-right">Price</Label>
                 <div className="col-span-3 font-medium">
-                  {new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(selectedTrip.ticketPrice)}
+                  {new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(selectedTrip.price)}
                 </div>
               </div>
             </>
@@ -834,5 +834,3 @@ function NewBookingDialog({
     </Dialog>
   );
 }
-
-    
