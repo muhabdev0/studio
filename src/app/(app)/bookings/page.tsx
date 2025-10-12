@@ -2,6 +2,7 @@
 "use client";
 
 import * as React from "react";
+import Image from "next/image";
 import {
   CaretSortIcon,
   ChevronDownIcon,
@@ -97,6 +98,7 @@ function EditBookingDialog({
     const [selectedTripId, setSelectedTripId] = React.useState<string | undefined>();
     const [selectedSeat, setSelectedSeat] = React.useState<number | undefined>();
     const [status, setStatus] = React.useState<TicketBooking['status'] | undefined>();
+    const [customerPhotoUrl, setCustomerPhotoUrl] = React.useState<string | null>(null);
 
     const selectedTrip = trips.find(t => t.id === selectedTripId);
 
@@ -118,6 +120,7 @@ function EditBookingDialog({
             setSelectedTripId(booking.tripId);
             setSelectedSeat(booking.seatNumber);
             setStatus(booking.status);
+            setCustomerPhotoUrl(booking.customerPhotoUrl || null);
         }
     }, [booking]);
     
@@ -127,6 +130,17 @@ function EditBookingDialog({
             setSelectedSeat(undefined);
         }
     }, [selectedTrip, availableSeats, selectedSeat]);
+    
+    const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (file) {
+          const reader = new FileReader();
+          reader.onloadend = () => {
+              setCustomerPhotoUrl(reader.result as string);
+          };
+          reader.readAsDataURL(file);
+      }
+    };
 
 
     const handleUpdateBooking = () => {
@@ -138,7 +152,8 @@ function EditBookingDialog({
             tripId: selectedTripId,
             seatNumber: selectedSeat,
             status,
-            price: trips.find(t => t.id === selectedTripId)?.ticketPrice || booking.price
+            price: trips.find(t => t.id === selectedTripId)?.ticketPrice || booking.price,
+            customerPhotoUrl: customerPhotoUrl || `https://picsum.photos/seed/${customerName}/100/100`,
         };
         onBookingUpdated(booking.id, booking.tripId, booking.seatNumber, updatedData);
         onOpenChange(false);
@@ -219,6 +234,20 @@ function EditBookingDialog({
                         </SelectContent>
                         </Select>
                     </div>
+                     <div className="grid grid-cols-4 items-center gap-4">
+                        <Label htmlFor="image" className="text-right">
+                        Photo
+                        </Label>
+                        <Input id="image" type="file" accept="image/*" onChange={handleImageChange} className="col-span-3" />
+                    </div>
+                    {customerPhotoUrl && (
+                        <div className="grid grid-cols-4 items-center gap-4">
+                            <Label className="text-right">Preview</Label>
+                            <div className="col-span-3">
+                                <Image src={customerPhotoUrl} alt="Customer preview" width={100} height={100} className="rounded-md object-cover" />
+                            </div>
+                        </div>
+                    )}
                 </div>
                 <DialogFooter>
                     <Button type="submit" onClick={handleUpdateBooking}>Save Changes</Button>
@@ -658,12 +687,14 @@ function NewBookingDialog({
     open: boolean, 
     onOpenChange: (open: boolean) => void,
     trips: Trip[],
-    onBookingCreated: (booking: Omit<TicketBooking, "id" | "price"> & { price: number }) => void
+    onBookingCreated: (booking: Omit<TicketBooking, "id">) => void
 }) {
   const [customerName, setCustomerName] = React.useState("");
   const [idNumber, setIdNumber] = React.useState("");
   const [selectedTripId, setSelectedTripId] = React.useState<string | undefined>();
   const [selectedSeat, setSelectedSeat] = React.useState<number | undefined>();
+  const [customerPhotoUrl, setCustomerPhotoUrl] = React.useState<string | null>(null);
+
   
   const selectedTrip = trips.find(t => t.id === selectedTripId);
 
@@ -673,6 +704,17 @@ function NewBookingDialog({
     const allSeats = Array.from({ length: selectedTrip.totalSeats }, (_, i) => i + 1);
     return allSeats.filter(seat => !booked.includes(seat));
   }, [selectedTrip]);
+
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (file) {
+          const reader = new FileReader();
+          reader.onloadend = () => {
+              setCustomerPhotoUrl(reader.result as string);
+          };
+          reader.readAsDataURL(file);
+      }
+  };
 
   const handleCreateBooking = () => {
     if (!customerName || !idNumber || !selectedTrip || !selectedSeat) return;
@@ -685,6 +727,7 @@ function NewBookingDialog({
         price: selectedTrip.ticketPrice,
         bookingDate: Timestamp.now(),
         status: "Confirmed" as const,
+        customerPhotoUrl: customerPhotoUrl || `https://picsum.photos/seed/${customerName}/100/100`,
     };
     onBookingCreated(newBooking);
     onOpenChange(false);
@@ -693,6 +736,7 @@ function NewBookingDialog({
     setIdNumber("");
     setSelectedTripId(undefined);
     setSelectedSeat(undefined);
+    setCustomerPhotoUrl(null);
   };
 
 
@@ -768,6 +812,20 @@ function NewBookingDialog({
               </div>
             </>
           )}
+           <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="image" className="text-right">
+                Photo
+                </Label>
+                <Input id="image" type="file" accept="image/*" onChange={handleImageChange} className="col-span-3" />
+            </div>
+            {customerPhotoUrl && (
+                <div className="grid grid-cols-4 items-center gap-4">
+                    <Label className="text-right">Preview</Label>
+                    <div className="col-span-3">
+                        <Image src={customerPhotoUrl} alt="Customer preview" width={100} height={100} className="rounded-md object-cover" />
+                    </div>
+                </div>
+            )}
         </div>
         <DialogFooter>
           <Button type="submit" onClick={handleCreateBooking}>Create Booking</Button>

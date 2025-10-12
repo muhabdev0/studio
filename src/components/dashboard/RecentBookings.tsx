@@ -42,7 +42,7 @@ export function RecentBookings({ bookingsData, isLoading }: RecentBookingsProps)
             return (
                 <div key={booking.id} className="flex items-center">
                     <Avatar className="h-9 w-9">
-                        <AvatarImage src={`https://picsum.photos/seed/${booking.customerName}/100/100`} alt="Avatar" data-ai-hint="person portrait"/>
+                        <AvatarImage src={booking.customerPhotoUrl} alt="Avatar" data-ai-hint="person portrait"/>
                         <AvatarFallback>{booking.customerName.charAt(0)}</AvatarFallback>
                     </Avatar>
                     <div className="ml-4 space-y-1">

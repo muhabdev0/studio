@@ -53,6 +53,7 @@ export interface TicketBooking {
   price: number;
   bookingDate: Timestamp;
   status: "Confirmed" | "Pending" | "Cancelled";
+  customerPhotoUrl?: string;
 }
 
 export interface FinanceRecord {

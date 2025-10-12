@@ -202,6 +202,11 @@
             "Pending",
             "Cancelled"
           ]
+        },
+        "customerPhotoUrl": {
+          "type": "string",
+          "description": "URL of the customer's photo.",
+          "format": "uri"
         }
       },
       "required": [
