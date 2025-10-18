@@ -1,9 +1,10 @@
+
 "use client";
 
 import * as React from "react";
 import Image from "next/image";
 import { PlusCircle, MoreVertical, Pencil, Trash2, Bus as BusIcon } from "lucide-react";
-import { collection, doc } from "firebase/firestore";
+import { collection, doc, addDoc, updateDoc, deleteDoc } from "firebase/firestore";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -41,7 +42,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { Bus } from "@/lib/types";
-import { useFirestore, useCollection, useMemoFirebase, deleteDocumentNonBlocking, addDocumentNonBlocking, updateDocumentNonBlocking } from "@/firebase";
+import { useFirestore, useCollection, useMemoFirebase } from "@/firebase";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -52,6 +53,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { useToast } from "@/hooks/use-toast";
 
 const maintenanceStatuses: Bus["maintenanceStatus"][] = ["Operational", "Maintenance", "Out of Service"];
 
@@ -63,7 +65,7 @@ function BusDialog({
 }: { 
     open: boolean; 
     onOpenChange: (open: boolean) => void; 
-    onSave: (bus: Partial<Bus>) => void;
+    onSave: (bus: Partial<Bus>) => Promise<void>;
     bus?: Bus | null;
 }) {
   const [name, setName] = React.useState("");
@@ -71,7 +73,9 @@ function BusDialog({
   const [capacity, setCapacity] = React.useState<number>(0);
   const [maintenanceStatus, setMaintenanceStatus] = React.useState<Bus["maintenanceStatus"]>("Operational");
   const [imageUrl, setImageUrl] = React.useState<string | null>(null);
+  const [isLoading, setIsLoading] = React.useState(false);
 
+  const { toast } = useToast();
   const isEditMode = !!bus;
 
   React.useEffect(() => {
@@ -102,9 +106,13 @@ function BusDialog({
       }
   };
 
-  const handleSave = () => {
-    if (!name || !plateNumber || capacity <= 0) return;
+  const handleSave = async () => {
+    if (!name || !plateNumber || capacity <= 0) {
+        toast({ variant: "destructive", title: "Missing Information", description: "Please fill out all required fields."});
+        return;
+    }
 
+    setIsLoading(true);
     const busData: Partial<Bus> = {
       name,
       plateNumber,
@@ -113,8 +121,12 @@ function BusDialog({
       imageUrl: imageUrl || `https://picsum.photos/seed/${plateNumber}/600/400`,
     };
 
-    onSave(busData);
-    onOpenChange(false);
+    try {
+        await onSave(busData);
+        onOpenChange(false);
+    } finally {
+        setIsLoading(false);
+    }
   };
 
   return (
@@ -178,7 +190,9 @@ function BusDialog({
           )}
         </div>
         <DialogFooter>
-          <Button type="submit" onClick={handleSave}>{isEditMode ? 'Save Changes' : 'Create Bus'}</Button>
+          <Button type="submit" onClick={handleSave} disabled={isLoading}>
+            {isLoading ? "Saving..." : (isEditMode ? 'Save Changes' : 'Create Bus')}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -199,29 +213,48 @@ export default function BusesPage() {
   const firestore = useFirestore();
   const busesQuery = useMemoFirebase(() => collection(firestore, "buses"), [firestore]);
   const { data: busesData, isLoading } = useCollection<Bus>(busesQuery);
+  const { toast } = useToast();
   
   const [isNewBusDialogOpen, setIsNewBusDialogOpen] = React.useState(false);
   const [isEditBusDialogOpen, setIsEditBusDialogOpen] = React.useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = React.useState(false);
   const [selectedBus, setSelectedBus] = React.useState<Bus | null>(null);
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (!selectedBus) return;
     const busRef = doc(firestore, "buses", selectedBus.id);
-    deleteDocumentNonBlocking(busRef);
+    try {
+        await deleteDoc(busRef);
+        toast({ title: "Bus Deleted", description: `Bus ${selectedBus.name} has been removed.` });
+    } catch (error) {
+        console.error("Error deleting bus:", error);
+        toast({ variant: "destructive", title: "Error", description: "Could not delete the bus." });
+    }
     setIsDeleteDialogOpen(false);
     setSelectedBus(null);
   };
 
-  const handleBusCreated = (newBus: Partial<Bus>) => {
+  const handleBusCreated = async (newBus: Partial<Bus>) => {
     const busesCollection = collection(firestore, 'buses');
-    addDocumentNonBlocking(busesCollection, newBus);
+    try {
+        await addDoc(busesCollection, newBus);
+        toast({ title: "Bus Added", description: `Bus ${newBus.name} has been added successfully.` });
+    } catch (error) {
+        console.error("Error creating bus:", error);
+        toast({ variant: "destructive", title: "Error", description: "Could not add the new bus." });
+    }
   };
 
-  const handleBusUpdated = (updatedBus: Partial<Bus>) => {
+  const handleBusUpdated = async (updatedBus: Partial<Bus>) => {
     if (!selectedBus) return;
     const busRef = doc(firestore, 'buses', selectedBus.id);
-    updateDocumentNonBlocking(busRef, updatedBus);
+    try {
+        await updateDoc(busRef, updatedBus);
+        toast({ title: "Bus Updated", description: "The bus details have been updated." });
+    } catch (error) {
+        console.error("Error updating bus:", error);
+        toast({ variant: "destructive", title: "Error", description: "Could not update the bus details." });
+    }
   };
   
   const openEditDialog = (bus: Bus) => {
@@ -355,3 +388,5 @@ export default function BusesPage() {
     </>
   );
 }
+
+    

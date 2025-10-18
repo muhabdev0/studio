@@ -1,3 +1,4 @@
+
 "use client";
 
 import * as React from "react";
@@ -19,7 +20,7 @@ import {
   getSortedRowModel,
   useReactTable,
 } from "@tanstack/react-table";
-import { collection } from "firebase/firestore";
+import { collection, addDoc } from "firebase/firestore";
 
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -67,7 +68,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { Employee, UserRole } from "@/lib/types";
-import { useFirestore, useCollection, useMemoFirebase, addDocumentNonBlocking } from "@/firebase";
+import { useFirestore, useCollection, useMemoFirebase } from "@/firebase";
+import { useToast } from "@/hooks/use-toast";
 
 const userRoles: UserRole[] = ["Admin", "Manager", "Driver", "Employee", "Mechanic"];
 
@@ -87,16 +89,29 @@ function NewEmployeeDialog({
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onEmployeeCreated: (employee: Omit<Employee, "id">) => void;
+  onEmployeeCreated: (employee: Omit<Employee, "id">) => Promise<void>;
 }) {
   const [fullName, setFullName] = React.useState("");
   const [role, setRole] = React.useState<UserRole>("Employee");
   const [contactInfo, setContactInfo] = React.useState("");
   const [salary, setSalary] = React.useState<number>(0);
+  const [isLoading, setIsLoading] = React.useState(false);
+  const { toast } = useToast();
 
-  const handleCreateEmployee = () => {
-    if (!fullName || !role || !contactInfo || salary <= 0) return;
+  const resetForm = () => {
+    setFullName("");
+    setRole("Employee");
+    setContactInfo("");
+    setSalary(0);
+  }
 
+  const handleCreateEmployee = async () => {
+    if (!fullName || !role || !contactInfo || salary <= 0) {
+        toast({ variant: "destructive", title: "Missing Information", description: "Please fill out all required fields."});
+        return;
+    }
+    
+    setIsLoading(true);
     const newEmployee: Omit<Employee, "id"> = {
       fullName,
       role,
@@ -104,13 +119,14 @@ function NewEmployeeDialog({
       salary,
       profilePhotoUrl: `https://picsum.photos/seed/${fullName}/100/100`
     };
-    onEmployeeCreated(newEmployee);
-    onOpenChange(false);
-    // Reset form
-    setFullName("");
-    setRole("Employee");
-    setContactInfo("");
-    setSalary(0);
+    
+    try {
+        await onEmployeeCreated(newEmployee);
+        onOpenChange(false);
+        resetForm();
+    } finally {
+        setIsLoading(false);
+    }
   };
 
   return (
@@ -160,7 +176,9 @@ function NewEmployeeDialog({
           </div>
         </div>
         <DialogFooter>
-          <Button type="submit" onClick={handleCreateEmployee}>Create Employee</Button>
+          <Button type="submit" onClick={handleCreateEmployee} disabled={isLoading}>
+            {isLoading ? "Creating..." : "Create Employee"}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -281,6 +299,7 @@ export default function EmployeesPage() {
   const firestore = useFirestore();
   const employeesQuery = useMemoFirebase(() => collection(firestore, "employees"), [firestore]);
   const { data: employeesData, isLoading } = useCollection<Employee>(employeesQuery);
+  const { toast } = useToast();
 
   const [sorting, setSorting] = React.useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>(
@@ -310,9 +329,15 @@ export default function EmployeesPage() {
     },
   });
 
-  const handleEmployeeCreated = (newEmployee: Omit<Employee, "id">) => {
+  const handleEmployeeCreated = async (newEmployee: Omit<Employee, "id">) => {
     const employeesCollection = collection(firestore, 'employees');
-    addDocumentNonBlocking(employeesCollection, newEmployee);
+    try {
+        await addDoc(employeesCollection, newEmployee);
+        toast({ title: "Employee Added", description: `${newEmployee.fullName} has been added.` });
+    } catch (error) {
+        console.error("Error creating employee: ", error);
+        toast({ variant: "destructive", title: "Error", description: "Could not add the new employee." });
+    }
   };
 
 

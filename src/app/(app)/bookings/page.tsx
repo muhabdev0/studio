@@ -21,7 +21,7 @@ import {
   useReactTable,
 } from "@tanstack/react-table";
 import { PlusCircle } from "lucide-react";
-import { collection, Timestamp, doc, updateDoc, arrayRemove, arrayUnion, getDoc } from "firebase/firestore";
+import { collection, Timestamp, doc, updateDoc, arrayRemove, arrayUnion, getDoc, addDoc, deleteDoc } from "firebase/firestore";
 
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -78,7 +78,8 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import type { Trip, TicketBooking, FinanceRecord } from "@/lib/types";
-import { useFirestore, useCollection, useMemoFirebase, addDocumentNonBlocking, deleteDocumentNonBlocking, updateDocumentNonBlocking } from "@/firebase";
+import { useFirestore, useCollection, useMemoFirebase } from "@/firebase";
+import { useToast } from "@/hooks/use-toast";
 
 function EditBookingDialog({
     open,
@@ -91,7 +92,7 @@ function EditBookingDialog({
     onOpenChange: (open: boolean) => void;
     booking: TicketBooking | null;
     trips: Trip[];
-    onBookingUpdated: (bookingId: string, oldTripId: string, oldSeat: number, updatedData: Partial<TicketBooking>) => void;
+    onBookingUpdated: (bookingId: string, oldTripId: string, oldSeat: number, updatedData: Partial<TicketBooking>) => Promise<void>;
 }) {
     const [customerName, setCustomerName] = React.useState("");
     const [idNumber, setIdNumber] = React.useState("");
@@ -99,7 +100,9 @@ function EditBookingDialog({
     const [selectedSeat, setSelectedSeat] = React.useState<number | undefined>();
     const [status, setStatus] = React.useState<TicketBooking['status'] | undefined>();
     const [customerPhotoUrl, setCustomerPhotoUrl] = React.useState<string | null>(null);
+    const [isLoading, setIsLoading] = React.useState(false);
 
+    const { toast } = useToast();
     const selectedTrip = trips.find(t => t.id === selectedTripId);
 
     const availableSeats = React.useMemo(() => {
@@ -143,9 +146,13 @@ function EditBookingDialog({
     };
 
 
-    const handleUpdateBooking = () => {
-        if (!booking || !customerName || !idNumber || !selectedTripId || !selectedSeat || !status) return;
+    const handleUpdateBooking = async () => {
+        if (!booking || !customerName || !idNumber || !selectedTripId || !selectedSeat || !status) {
+            toast({ variant: "destructive", title: "Missing Information", description: "Please fill out all required fields."});
+            return;
+        }
 
+        setIsLoading(true);
         const updatedData: Partial<TicketBooking> = {
             customerName,
             idNumber,
@@ -155,8 +162,13 @@ function EditBookingDialog({
             price: trips.find(t => t.id === selectedTripId)?.price || booking.price,
             customerPhotoUrl: customerPhotoUrl || `https://picsum.photos/seed/${customerName}/100/100`,
         };
-        onBookingUpdated(booking.id, booking.tripId, booking.seatNumber, updatedData);
-        onOpenChange(false);
+        
+        try {
+            await onBookingUpdated(booking.id, booking.tripId, booking.seatNumber, updatedData);
+            onOpenChange(false);
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     if (!booking) return null;
@@ -250,7 +262,9 @@ function EditBookingDialog({
                     )}
                 </div>
                 <DialogFooter>
-                    <Button type="submit" onClick={handleUpdateBooking}>Save Changes</Button>
+                    <Button type="submit" onClick={handleUpdateBooking} disabled={isLoading}>
+                        {isLoading ? "Saving..." : "Save Changes"}
+                    </Button>
                 </DialogFooter>
             </DialogContent>
         </Dialog>
@@ -259,6 +273,7 @@ function EditBookingDialog({
 
 export default function BookingsPage() {
   const firestore = useFirestore();
+  const { toast } = useToast();
 
   const [sorting, setSorting] = React.useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([]);
@@ -275,73 +290,89 @@ export default function BookingsPage() {
   const tripsQuery = useMemoFirebase(() => collection(firestore, "trips"), [firestore]);
   const { data: tripsData, isLoading: isLoadingTrips } = useCollection<Trip>(tripsQuery);
 
-  const handleBookingCreated = (newBooking: Omit<TicketBooking, "id">) => {
+  const handleBookingCreated = async (newBooking: Omit<TicketBooking, "id">) => {
     const bookingsCollection = collection(firestore, 'ticketBookings');
-    addDocumentNonBlocking(bookingsCollection, newBooking)
-      .then(docRef => {
-        if (docRef) {
-          const tripRef = doc(firestore, 'trips', newBooking.tripId);
-          getDoc(tripRef).then(tripSnap => {
-              if (tripSnap.exists()) {
-                  updateDoc(tripRef, { bookedSeats: arrayUnion(newBooking.seatNumber) });
-              }
-          });
+    const financeCollection = collection(firestore, 'financeRecords');
+    const tripRef = doc(firestore, 'trips', newBooking.tripId);
+    
+    try {
+        await addDoc(bookingsCollection, newBooking);
 
-          // Create a corresponding finance record for the income
-          const financeCollection = collection(firestore, 'financeRecords');
-          const financeRecord: Omit<FinanceRecord, "id"> = {
-              type: "Income",
-              category: "Ticket Sale",
-              amount: newBooking.price,
-              date: newBooking.bookingDate,
-              description: `Ticket sale for ${newBooking.customerName} on trip ${newBooking.tripId}`
-          };
-          addDocumentNonBlocking(financeCollection, financeRecord);
+        // Update trip's booked seats
+        const tripSnap = await getDoc(tripRef);
+        if (tripSnap.exists()) {
+            await updateDoc(tripRef, { bookedSeats: arrayUnion(newBooking.seatNumber) });
         }
-      });
-  };
 
-  const handleBookingUpdated = (bookingId: string, oldTripId: string, oldSeat: number, updatedData: Partial<TicketBooking>) => {
-    const bookingRef = doc(firestore, 'ticketBookings', bookingId);
-    updateDocumentNonBlocking(bookingRef, updatedData);
+        // Create finance record
+        const financeRecord: Omit<FinanceRecord, "id"> = {
+            type: "Income",
+            category: "Ticket Sale",
+            amount: newBooking.price,
+            date: newBooking.bookingDate,
+            description: `Ticket sale for ${newBooking.customerName} on trip ${newBooking.tripId}`
+        };
+        await addDoc(financeCollection, financeRecord);
 
-    const newTripId = updatedData.tripId;
-    const newSeat = updatedData.seatNumber;
-
-    // Handle seat changes
-    if (newTripId && newSeat && (newTripId !== oldTripId || newSeat !== oldSeat)) {
-        // Free up old seat
-        const oldTripRef = doc(firestore, 'trips', oldTripId);
-         getDoc(oldTripRef).then(tripSnap => {
-            if (tripSnap.exists()) {
-                updateDoc(oldTripRef, { bookedSeats: arrayRemove(oldSeat) });
-            }
-        });
-
-        // Book new seat
-        const newTripRef = doc(firestore, 'trips', newTripId);
-        getDoc(newTripRef).then(tripSnap => {
-            if (tripSnap.exists()) {
-                updateDoc(newTripRef, { bookedSeats: arrayUnion(newSeat) });
-            }
-        });
+        toast({ title: "Booking Created", description: "The new booking has been successfully created." });
+    } catch (error) {
+        console.error("Error creating booking:", error);
+        toast({ variant: "destructive", title: "Error", description: "Could not create the booking." });
     }
   };
 
-  const handleDeleteBooking = () => {
+  const handleBookingUpdated = async (bookingId: string, oldTripId: string, oldSeat: number, updatedData: Partial<TicketBooking>) => {
+    const bookingRef = doc(firestore, 'ticketBookings', bookingId);
+    
+    try {
+        await updateDoc(bookingRef, updatedData);
+
+        const newTripId = updatedData.tripId;
+        const newSeat = updatedData.seatNumber;
+
+        // Handle seat changes if trip or seat has changed
+        if (newTripId && newSeat && (newTripId !== oldTripId || newSeat !== oldSeat)) {
+            // Free up old seat
+            const oldTripRef = doc(firestore, 'trips', oldTripId);
+            const oldTripSnap = await getDoc(oldTripRef);
+            if (oldTripSnap.exists()) {
+                await updateDoc(oldTripRef, { bookedSeats: arrayRemove(oldSeat) });
+            }
+
+            // Book new seat
+            const newTripRef = doc(firestore, 'trips', newTripId);
+            const newTripSnap = await getDoc(newTripRef);
+            if (newTripSnap.exists()) {
+                await updateDoc(newTripRef, { bookedSeats: arrayUnion(newSeat) });
+            }
+        }
+        toast({ title: "Booking Updated", description: "The booking has been successfully updated." });
+    } catch (error) {
+        console.error("Error updating booking:", error);
+        toast({ variant: "destructive", title: "Error", description: "Could not update the booking." });
+    }
+  };
+
+  const handleDeleteBooking = async () => {
     if (!selectedBooking) return;
     const bookingRef = doc(firestore, "ticketBookings", selectedBooking.id);
-    deleteDocumentNonBlocking(bookingRef);
-
-    // Free up the seat on the trip
     const tripRef = doc(firestore, 'trips', selectedBooking.tripId);
-    getDoc(tripRef).then(tripSnap => {
+    
+    try {
+        await deleteDoc(bookingRef);
+
+        // Free up the seat on the trip
+        const tripSnap = await getDoc(tripRef);
         if (tripSnap.exists()) {
-            updateDoc(tripRef, {
+            await updateDoc(tripRef, {
                 bookedSeats: arrayRemove(selectedBooking.seatNumber)
             });
         }
-    });
+        toast({ title: "Booking Deleted", description: "The booking has been removed." });
+    } catch (error) {
+        console.error("Error deleting booking:", error);
+        toast({ variant: "destructive", title: "Error", description: "Could not delete the booking." });
+    }
 
     setIsDeleteDialogOpen(false);
     setSelectedBooking(null);
@@ -687,15 +718,16 @@ function NewBookingDialog({
     open: boolean, 
     onOpenChange: (open: boolean) => void,
     trips: Trip[],
-    onBookingCreated: (booking: Omit<TicketBooking, "id">) => void
+    onBookingCreated: (booking: Omit<TicketBooking, "id">) => Promise<void>
 }) {
   const [customerName, setCustomerName] = React.useState("");
   const [idNumber, setIdNumber] = React.useState("");
   const [selectedTripId, setSelectedTripId] = React.useState<string | undefined>();
   const [selectedSeat, setSelectedSeat] = React.useState<number | undefined>();
   const [customerPhotoUrl, setCustomerPhotoUrl] = React.useState<string | null>(null);
-
+  const [isLoading, setIsLoading] = React.useState(false);
   
+  const { toast } = useToast();
   const selectedTrip = trips.find(t => t.id === selectedTripId);
 
   const availableSeats = React.useMemo(() => {
@@ -715,10 +747,22 @@ function NewBookingDialog({
           reader.readAsDataURL(file);
       }
   };
+  
+  const resetForm = () => {
+    setCustomerName("");
+    setIdNumber("");
+    setSelectedTripId(undefined);
+    setSelectedSeat(undefined);
+    setCustomerPhotoUrl(null);
+  }
 
-  const handleCreateBooking = () => {
-    if (!customerName || !idNumber || !selectedTrip || !selectedSeat) return;
+  const handleCreateBooking = async () => {
+    if (!customerName || !idNumber || !selectedTrip || !selectedSeat) {
+        toast({ variant: "destructive", title: "Missing Information", description: "Please fill out all required fields."});
+        return;
+    }
 
+    setIsLoading(true);
     const newBooking = {
         tripId: selectedTrip.id,
         customerName,
@@ -729,14 +773,14 @@ function NewBookingDialog({
         status: "Confirmed" as const,
         customerPhotoUrl: customerPhotoUrl || `https://picsum.photos/seed/${customerName}/100/100`,
     };
-    onBookingCreated(newBooking);
-    onOpenChange(false);
-    // Reset form
-    setCustomerName("");
-    setIdNumber("");
-    setSelectedTripId(undefined);
-    setSelectedSeat(undefined);
-    setCustomerPhotoUrl(null);
+
+    try {
+        await onBookingCreated(newBooking);
+        onOpenChange(false);
+        resetForm();
+    } finally {
+        setIsLoading(false);
+    }
   };
 
 
@@ -828,9 +872,13 @@ function NewBookingDialog({
             )}
         </div>
         <DialogFooter>
-          <Button type="submit" onClick={handleCreateBooking}>Create Booking</Button>
+          <Button type="submit" onClick={handleCreateBooking} disabled={isLoading}>
+            {isLoading ? "Creating..." : "Create Booking"}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
   );
 }
+
+    

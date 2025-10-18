@@ -1,3 +1,4 @@
+
 "use client";
 
 import * as React from "react";
@@ -22,7 +23,7 @@ import { PlusCircle } from "lucide-react";
 import { Calendar as CalendarIcon } from "lucide-react";
 import { format } from "date-fns";
 import { enUS } from 'date-fns/locale';
-import { collection, Timestamp, doc } from "firebase/firestore";
+import { collection, Timestamp, doc, addDoc, updateDoc, deleteDoc } from "firebase/firestore";
 
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -82,7 +83,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
 import type { Trip, Bus, Employee, TripStatus } from "@/lib/types";
-import { useFirestore, useCollection, useMemoFirebase, addDocumentNonBlocking, updateDocumentNonBlocking, deleteDocumentNonBlocking } from "@/firebase";
+import { useFirestore, useCollection, useMemoFirebase } from "@/firebase";
+import { useToast } from "@/hooks/use-toast";
 
 const tripStatuses: TripStatus[] = ["Scheduled", "In Progress", "Completed", "Cancelled"];
 
@@ -97,7 +99,7 @@ function EditTripDialog({
     open: boolean; 
     onOpenChange: (open: boolean) => void; 
     trip: Trip | null; 
-    onTripUpdated: (tripId: string, updatedData: Partial<Trip>) => void;
+    onTripUpdated: (tripId: string, updatedData: Partial<Trip>) => Promise<void>;
     buses: Bus[];
     drivers: Employee[];
 }) {
@@ -107,9 +109,11 @@ function EditTripDialog({
     const [time, setTime] = React.useState("00:00");
     const [busId, setBusId] = React.useState<string>();
     const [driverId, setDriverId] = React.useState<string>();
-    const [ticketPrice, setTicketPrice] = React.useState<number>(0);
+    const [price, setPrice] = React.useState<number>(0);
     const [status, setStatus] = React.useState<TripStatus>("Scheduled");
+    const [isLoading, setIsLoading] = React.useState(false);
 
+    const { toast } = useToast();
     const availableDrivers = drivers.filter(d => d.role === "Driver");
 
     React.useEffect(() => {
@@ -121,13 +125,18 @@ function EditTripDialog({
             setTime(format(tripDate, "HH:mm"));
             setBusId(trip.busId);
             setDriverId(trip.driverId);
-            setTicketPrice(trip.ticketPrice);
+            setPrice(trip.price);
             setStatus(trip.status);
         }
     }, [trip]);
 
-    const handleUpdateTrip = () => {
-        if (!trip || !from || !to || !dateTime || !busId || !driverId || !ticketPrice) return;
+    const handleUpdateTrip = async () => {
+        if (!trip || !from || !to || !dateTime || !busId || !driverId || !price) {
+            toast({ variant: "destructive", title: "Missing Information", description: "Please fill out all required fields."});
+            return;
+        }
+
+        setIsLoading(true);
 
         const [hours, minutes] = time.split(':').map(Number);
         const combinedDateTime = new Date(dateTime);
@@ -139,7 +148,7 @@ function EditTripDialog({
             dateTime: Timestamp.fromDate(combinedDateTime),
             busId,
             driverId,
-            ticketPrice,
+            price,
             status,
         };
 
@@ -148,8 +157,12 @@ function EditTripDialog({
             updatedData.totalSeats = selectedBus.capacity;
         }
 
-        onTripUpdated(trip.id, updatedData);
-        onOpenChange(false);
+        try {
+            await onTripUpdated(trip.id, updatedData);
+            onOpenChange(false);
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     if (!trip) return null;
@@ -225,7 +238,7 @@ function EditTripDialog({
                     </div>
                     <div className="grid grid-cols-4 items-center gap-4">
                         <Label htmlFor="price" className="text-right">Ticket Price</Label>
-                        <Input id="price" type="number" value={ticketPrice} onChange={e => setTicketPrice(Number(e.target.value))} className="col-span-3" />
+                        <Input id="price" type="number" value={price} onChange={e => setPrice(Number(e.target.value))} className="col-span-3" />
                     </div>
                     <div className="grid grid-cols-4 items-center gap-4">
                         <Label htmlFor="status" className="text-right">Status</Label>
@@ -242,7 +255,9 @@ function EditTripDialog({
                     </div>
                 </div>
                 <DialogFooter>
-                    <Button onClick={handleUpdateTrip}>Save Changes</Button>
+                    <Button onClick={handleUpdateTrip} disabled={isLoading}>
+                        {isLoading ? "Saving..." : "Save Changes"}
+                    </Button>
                 </DialogFooter>
             </DialogContent>
         </Dialog>
@@ -258,7 +273,7 @@ function NewTripDialog({
 }: { 
     open: boolean, 
     onOpenChange: (open: boolean) => void, 
-    onAddTrip: (newTrip: Omit<Trip, "id">) => void,
+    onAddTrip: (newTrip: Omit<Trip, "id">) => Promise<void>,
     buses: Bus[],
     drivers: Employee[]
 }) {
@@ -268,14 +283,30 @@ function NewTripDialog({
   const [time, setTime] = React.useState("00:00");
   const [busId, setBusId] = React.useState<string>();
   const [driverId, setDriverId] = React.useState<string>();
-  const [ticketPrice, setTicketPrice] = React.useState<number>(0);
+  const [price, setPrice] = React.useState<number>(0);
+  const [isLoading, setIsLoading] = React.useState(false);
 
+  const { toast } = useToast();
   const selectedBus = buses.find(b => b.id === busId);
   const availableDrivers = drivers.filter(d => d.role === "Driver");
 
-  const handleCreateTrip = () => {
-    if (!from || !to || !dateTime || !busId || !driverId || !ticketPrice || !selectedBus) return;
+  const resetForm = () => {
+    setFrom("");
+    setTo("");
+    setDateTime(undefined);
+    setTime("00:00");
+    setBusId(undefined);
+    setDriverId(undefined);
+    setPrice(0);
+  }
+
+  const handleCreateTrip = async () => {
+    if (!from || !to || !dateTime || !busId || !driverId || !price || !selectedBus) {
+        toast({ variant: "destructive", title: "Missing Information", description: "Please fill out all required fields."});
+        return;
+    }
     
+    setIsLoading(true);
     const [hours, minutes] = time.split(':').map(Number);
     const combinedDateTime = new Date(dateTime);
     combinedDateTime.setHours(hours, minutes);
@@ -287,20 +318,18 @@ function NewTripDialog({
       busId,
       driverId,
       status: new Date(combinedDateTime) > new Date() ? "Scheduled" : "Completed",
-      ticketPrice,
+      price,
       totalSeats: selectedBus.capacity,
       bookedSeats: [],
     };
-    onAddTrip(newTrip);
-    onOpenChange(false);
-    // Reset form
-    setFrom("");
-    setTo("");
-    setDateTime(undefined);
-    setTime("00:00");
-    setBusId(undefined);
-    setDriverId(undefined);
-    setTicketPrice(0);
+
+    try {
+        await onAddTrip(newTrip);
+        onOpenChange(false);
+        resetForm();
+    } finally {
+        setIsLoading(false);
+    }
   };
 
   return (
@@ -374,11 +403,13 @@ function NewTripDialog({
           </div>
           <div className="grid grid-cols-4 items-center gap-4">
             <Label htmlFor="price" className="text-right">Ticket Price</Label>
-            <Input id="price" type="number" value={ticketPrice} onChange={e => setTicketPrice(Number(e.target.value))} className="col-span-3" />
+            <Input id="price" type="number" value={price} onChange={e => setPrice(Number(e.target.value))} className="col-span-3" />
           </div>
         </div>
         <DialogFooter>
-          <Button onClick={handleCreateTrip}>Create Trip</Button>
+          <Button onClick={handleCreateTrip} disabled={isLoading}>
+            {isLoading ? "Creating..." : "Create Trip"}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -387,6 +418,7 @@ function NewTripDialog({
 
 export default function TripsPage() {
   const firestore = useFirestore();
+  const { toast } = useToast();
 
   const tripsQuery = useMemoFirebase(() => collection(firestore, "trips"), [firestore]);
   const { data: trips, isLoading: isLoadingTrips } = useCollection<Trip>(tripsQuery);
@@ -418,12 +450,40 @@ export default function TripsPage() {
     setIsDeleteDialogOpen(true);
   };
 
-  const handleDeleteTrip = () => {
+  const handleDeleteTrip = async () => {
     if (!selectedTrip) return;
     const tripRef = doc(firestore, "trips", selectedTrip.id);
-    deleteDocumentNonBlocking(tripRef);
+    try {
+        await deleteDoc(tripRef);
+        toast({ title: "Trip Deleted", description: "The trip has been successfully removed." });
+    } catch (error) {
+        console.error("Error deleting trip: ", error);
+        toast({ variant: "destructive", title: "Error", description: "Could not delete the trip." });
+    }
     setIsDeleteDialogOpen(false);
     setSelectedTrip(null);
+  };
+
+  const handleAddTrip = async (newTrip: Omit<Trip, "id">) => {
+    const tripsCollection = collection(firestore, 'trips');
+    try {
+        await addDoc(tripsCollection, newTrip);
+        toast({ title: "Trip Created", description: "The new trip has been added successfully." });
+    } catch (error) {
+        console.error("Error creating trip: ", error);
+        toast({ variant: "destructive", title: "Error", description: "Could not create the new trip." });
+    }
+  };
+  
+  const handleTripUpdated = async (tripId: string, updatedData: Partial<Trip>) => {
+    const tripRef = doc(firestore, 'trips', tripId);
+    try {
+        await updateDoc(tripRef, updatedData);
+        toast({ title: "Trip Updated", description: "The trip details have been updated." });
+    } catch (error) {
+        console.error("Error updating trip: ", error);
+        toast({ variant: "destructive", title: "Error", description: "Could not update the trip details." });
+    }
   };
 
   const columns: ColumnDef<Trip>[] = [
@@ -567,16 +627,6 @@ export default function TripsPage() {
     },
   });
 
-  const handleAddTrip = (newTrip: Omit<Trip, "id">) => {
-    const tripsCollection = collection(firestore, 'trips');
-    addDocumentNonBlocking(tripsCollection, newTrip);
-  };
-  
-  const handleTripUpdated = (tripId: string, updatedData: Partial<Trip>) => {
-    const tripRef = doc(firestore, 'trips', tripId);
-    updateDocumentNonBlocking(tripRef, updatedData);
-  };
-  
   const isLoading = isLoadingTrips || isLoadingBuses || isLoadingEmployees;
 
   return (
@@ -753,3 +803,5 @@ export default function TripsPage() {
     </>
   );
 }
+
+    

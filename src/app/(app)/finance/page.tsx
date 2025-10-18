@@ -22,7 +22,7 @@ import {
   getFacetedRowModel,
   getFacetedUniqueValues,
 } from "@tanstack/react-table";
-import { collection, Timestamp } from "firebase/firestore";
+import { collection, Timestamp, addDoc } from "firebase/firestore";
 import { format } from "date-fns";
 import { enUS } from 'date-fns/locale';
 
@@ -76,7 +76,8 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import type { FinanceRecord } from "@/lib/types";
-import { useFirestore, useCollection, useMemoFirebase, addDocumentNonBlocking } from "@/firebase";
+import { useFirestore, useCollection, useMemoFirebase } from "@/firebase";
+import { useToast } from "@/hooks/use-toast";
 
 const financeRecordTypes: FinanceRecord["type"][] = ["Income", "Expense"];
 const financeRecordCategories: FinanceRecord["category"][] = ["Ticket Sale", "Salary", "Maintenance", "Rent", "Other"];
@@ -202,7 +203,7 @@ export const columns: ColumnDef<FinanceRecord>[] = [
   },
 ];
 
-function FinanceTable({ data, isLoading }: { data: FinanceRecord[] | null, isLoading: boolean }) {
+function FinanceTable({ data, isLoading }: { data: FinanceRecord[] | null | undefined, isLoading: boolean }) {
   const [sorting, setSorting] = React.useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([]);
   const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({});
@@ -362,17 +363,31 @@ function NewEntryDialog({
 } : {
     open: boolean;
     onOpenChange: (open: boolean) => void;
-    onEntryCreated: (entry: Omit<FinanceRecord, "id">) => void;
+    onEntryCreated: (entry: Omit<FinanceRecord, "id">) => Promise<void>;
 }) {
     const [type, setType] = React.useState<FinanceRecord["type"]>("Expense");
     const [category, setCategory] = React.useState<FinanceRecord["category"]>("Other");
     const [amount, setAmount] = React.useState<number>(0);
     const [date, setDate] = React.useState<Date>();
     const [description, setDescription] = React.useState("");
+    const [isLoading, setIsLoading] = React.useState(false);
+    const { toast } = useToast();
 
-    const handleCreateEntry = () => {
-        if (!type || !category || amount <= 0 || !date || !description) return;
+    const resetForm = () => {
+        setType("Expense");
+        setCategory("Other");
+        setAmount(0);
+        setDate(undefined);
+        setDescription("");
+    }
 
+    const handleCreateEntry = async () => {
+        if (!type || !category || amount <= 0 || !date || !description) {
+            toast({ variant: "destructive", title: "Missing Information", description: "Please fill out all required fields."});
+            return;
+        }
+
+        setIsLoading(true);
         const newEntry: Omit<FinanceRecord, "id"> = {
             type,
             category,
@@ -380,14 +395,14 @@ function NewEntryDialog({
             date: Timestamp.fromDate(date),
             description,
         };
-        onEntryCreated(newEntry);
-        onOpenChange(false);
-        // Reset form
-        setType("Expense");
-        setCategory("Other");
-        setAmount(0);
-        setDate(undefined);
-        setDescription("");
+        
+        try {
+            await onEntryCreated(newEntry);
+            onOpenChange(false);
+            resetForm();
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     return (
@@ -456,7 +471,9 @@ function NewEntryDialog({
                     </div>
                 </div>
                 <DialogFooter>
-                    <Button onClick={handleCreateEntry}>Create Entry</Button>
+                    <Button onClick={handleCreateEntry} disabled={isLoading}>
+                        {isLoading ? "Creating..." : "Create Entry"}
+                    </Button>
                 </DialogFooter>
             </DialogContent>
         </Dialog>
@@ -467,6 +484,7 @@ export default function FinancePage() {
   const firestore = useFirestore();
   const financeQuery = useMemoFirebase(() => collection(firestore, "financeRecords"), [firestore]);
   const { data, isLoading } = useCollection<FinanceRecord>(financeQuery);
+  const { toast } = useToast();
   
   const [isNewEntryDialogOpen, setIsNewEntryDialogOpen] = React.useState(false);
 
@@ -475,9 +493,15 @@ export default function FinancePage() {
   const salariesData = React.useMemo(() => expensesData?.filter(d => d.category === 'Salary'), [expensesData]);
   const maintenanceData = React.useMemo(() => expensesData?.filter(d => d.category === 'Maintenance'), [expensesData]);
 
-  const handleEntryCreated = (newEntry: Omit<FinanceRecord, "id">) => {
+  const handleEntryCreated = async (newEntry: Omit<FinanceRecord, "id">) => {
     const financeCollection = collection(firestore, 'financeRecords');
-    addDocumentNonBlocking(financeCollection, newEntry);
+    try {
+        await addDoc(financeCollection, newEntry);
+        toast({ title: "Entry Created", description: "The new financial record has been added."});
+    } catch (error) {
+        console.error("Error creating finance entry:", error);
+        toast({ variant: "destructive", title: "Error", description: "Could not create the new entry."});
+    }
   };
 
   return (
