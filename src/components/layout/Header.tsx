@@ -1,3 +1,4 @@
+
 "use client";
 
 import {
@@ -14,7 +15,7 @@ import {
   AvatarImage,
 } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { Bus, LogOut, User as UserIcon } from "lucide-react";
+import { LogOut, User as UserIcon } from "lucide-react";
 import { useUser, useAuth } from "@/firebase";
 import { signOut } from "firebase/auth";
 import { SidebarTrigger } from "../ui/sidebar";
@@ -39,11 +40,7 @@ export function Header() {
   return (
     <header className="sticky top-0 z-30 flex h-14 items-center gap-4 border-b bg-background px-4 sm:static sm:h-auto sm:border-0 sm:bg-transparent sm:px-6">
        <SidebarTrigger className="sm:hidden" />
-      <div className="flex w-full items-center justify-between">
-        <div className="flex items-center gap-2">
-           <Bus className="h-6 w-6 text-primary hidden sm:block" />
-           <h1 className="text-xl font-semibold hidden sm:block">SwiftRoute</h1>
-        </div>
+      <div className="flex w-full items-center justify-end">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button
