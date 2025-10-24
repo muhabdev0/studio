@@ -347,7 +347,7 @@ function NewEmployeeDialog({
           </div>
           <div className="grid grid-cols-4 items-center gap-4">
               <Label htmlFor="salaryPayday" className="text-right">
-                Salary Payday
+                Salary Payday (Day of Month)
               </Label>
               <Input id="salaryPayday" type="number" min="1" max="31" value={salaryPayday} onChange={e => setSalaryPayday(Number(e.target.value))} className="col-span-3" />
             </div>
