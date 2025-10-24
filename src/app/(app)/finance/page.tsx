@@ -7,7 +7,7 @@ import {
   ChevronDownIcon,
   DotsHorizontalIcon,
 } from "@radix-ui/react-icons";
-import { PlusCircle, Calendar as CalendarIcon } from "lucide-react";
+import { PlusCircle, Calendar as CalendarIcon, DollarSign, TrendingUp, TrendingDown } from "lucide-react";
 import {
   ColumnDef,
   ColumnFiltersState,
@@ -23,7 +23,7 @@ import {
   getFacetedUniqueValues,
 } from "@tanstack/react-table";
 import { collection, Timestamp, addDoc } from "firebase/firestore";
-import { format } from "date-fns";
+import { format, startOfWeek, endOfWeek, startOfMonth, endOfMonth, startOfYear, endOfYear, startOfDay, endOfDay } from "date-fns";
 import { enUS } from 'date-fns/locale';
 
 import { Button } from "@/components/ui/button";
@@ -78,6 +78,7 @@ import { cn } from "@/lib/utils";
 import type { FinanceRecord } from "@/lib/types";
 import { useFirestore, useCollection, useMemoFirebase } from "@/firebase";
 import { useToast } from "@/hooks/use-toast";
+import { KpiCard } from "@/components/dashboard/KpiCard";
 
 const financeRecordTypes: FinanceRecord["type"][] = ["Income", "Expense"];
 const financeRecordCategories: FinanceRecord["category"][] = ["Ticket Sale", "Salary", "Maintenance", "Rent", "Other"];
@@ -480,6 +481,8 @@ function NewEntryDialog({
     );
 }
 
+type DateRangePreset = "all" | "today" | "week" | "month" | "year";
+
 export default function FinancePage() {
   const firestore = useFirestore();
   const financeQuery = useMemoFirebase(() => collection(firestore, "financeRecords"), [firestore]);
@@ -487,9 +490,55 @@ export default function FinancePage() {
   const { toast } = useToast();
   
   const [isNewEntryDialogOpen, setIsNewEntryDialogOpen] = React.useState(false);
+  const [dateRange, setDateRange] = React.useState<DateRangePreset>("all");
 
-  const incomeData = React.useMemo(() => data?.filter(d => d.type === 'Income'), [data]);
-  const expensesData = React.useMemo(() => data?.filter(d => d.type === 'Expense'), [data]);
+  const filteredData = React.useMemo(() => {
+    if (!data) return [];
+    const now = new Date();
+    let startDate: Date | null = null;
+    let endDate: Date | null = null;
+
+    switch (dateRange) {
+        case "today":
+            startDate = startOfDay(now);
+            endDate = endOfDay(now);
+            break;
+        case "week":
+            startDate = startOfWeek(now, { weekStartsOn: 1 });
+            endDate = endOfWeek(now, { weekStartsOn: 1 });
+            break;
+        case "month":
+            startDate = startOfMonth(now);
+            endDate = endOfMonth(now);
+            break;
+        case "year":
+            startDate = startOfYear(now);
+            endDate = endOfYear(now);
+            break;
+        case "all":
+        default:
+            return data;
+    }
+
+    return data.filter(record => {
+        const recordDate = record.date.toDate();
+        return recordDate >= startDate! && recordDate <= endDate!;
+    });
+  }, [data, dateRange]);
+
+
+  const { totalIncome, totalExpenses, netBalance } = React.useMemo(() => {
+    const income = filteredData.filter(d => d.type === 'Income').reduce((acc, curr) => acc + curr.amount, 0);
+    const expenses = filteredData.filter(d => d.type === 'Expense').reduce((acc, curr) => acc + curr.amount, 0);
+    return {
+        totalIncome: income,
+        totalExpenses: expenses,
+        netBalance: income - expenses,
+    }
+  }, [filteredData]);
+
+  const incomeData = React.useMemo(() => filteredData.filter(d => d.type === 'Income'), [filteredData]);
+  const expensesData = React.useMemo(() => filteredData.filter(d => d.type === 'Expense'), [filteredData]);
   const salariesData = React.useMemo(() => expensesData?.filter(d => d.category === 'Salary'), [expensesData]);
   const maintenanceData = React.useMemo(() => expensesData?.filter(d => d.category === 'Maintenance'), [expensesData]);
 
@@ -503,46 +552,81 @@ export default function FinancePage() {
         toast({ variant: "destructive", title: "Error", description: "Could not create the new entry."});
     }
   };
+  
+  const formatCurrency = (value: number) => {
+    return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(value);
+  }
 
   return (
     <>
-      <Card>
-        <CardHeader>
-          <div className="flex justify-between items-center">
-              <div>
-                  <CardTitle>Finance Management</CardTitle>
-                  <CardDescription>
-                   Here you can track income, expenses, and view financial summaries.
-                  </CardDescription>
-              </div>
-               <Button onClick={() => setIsNewEntryDialogOpen(true)}>
-                  <PlusCircle className="mr-2 h-4 w-4" /> Add New Entry
-              </Button>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <Tabs defaultValue="all">
-            <TabsList className="grid w-full grid-cols-4">
-              <TabsTrigger value="all">All Records</TabsTrigger>
-              <TabsTrigger value="income">Income</TabsTrigger>
-              <TabsTrigger value="salaries">Salaries</TabsTrigger>
-              <TabsTrigger value="maintenance">Maintenance</TabsTrigger>
-            </TabsList>
-            <TabsContent value="all">
-              <FinanceTable data={data} isLoading={isLoading} />
-            </TabsContent>
-            <TabsContent value="income">
-              <FinanceTable data={incomeData} isLoading={isLoading} />
-            </TabsContent>
-            <TabsContent value="salaries">
-              <FinanceTable data={salariesData} isLoading={isLoading} />
-            </TabsContent>
-            <TabsContent value="maintenance">
-              <FinanceTable data={maintenanceData} isLoading={isLoading} />
-            </TabsContent>
-          </Tabs>
-        </CardContent>
-      </Card>
+      <div className="space-y-4">
+        <div className="flex justify-between items-center">
+            <div>
+                <h1 className="text-2xl font-bold">Financial Overview</h1>
+                <p className="text-muted-foreground">
+                    Track income, expenses, and view your financial health.
+                </p>
+            </div>
+            <div className="flex items-center gap-2">
+                <Select onValueChange={(value) => setDateRange(value as DateRangePreset)} value={dateRange}>
+                    <SelectTrigger className="w-[180px]">
+                        <SelectValue placeholder="Select a date range" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="all">All Time</SelectItem>
+                        <SelectItem value="today">Today</SelectItem>
+                        <SelectItem value="week">This Week</SelectItem>
+                        <SelectItem value="month">This Month</SelectItem>
+                        <SelectItem value="year">This Year</SelectItem>
+                    </SelectContent>
+                </Select>
+                 <Button onClick={() => setIsNewEntryDialogOpen(true)}>
+                    <PlusCircle className="mr-2 h-4 w-4" /> Add New Entry
+                </Button>
+            </div>
+        </div>
+
+        <div className="grid gap-4 md:grid-cols-3">
+            <KpiCard title="Net Balance" value={formatCurrency(netBalance)} icon={DollarSign} isLoading={isLoading} description="Total Income - Total Expenses"/>
+            <KpiCard title="Total Income" value={formatCurrency(totalIncome)} icon={TrendingUp} isLoading={isLoading} />
+            <KpiCard title="Total Expenses" value={formatCurrency(totalExpenses)} icon={TrendingDown} isLoading={isLoading} />
+        </div>
+
+        <Card>
+            <CardHeader>
+                <CardTitle>Transaction History</CardTitle>
+                <CardDescription>
+                A detailed list of all your financial transactions.
+                </CardDescription>
+            </CardHeader>
+            <CardContent>
+            <Tabs defaultValue="all">
+                <TabsList className="grid w-full grid-cols-5">
+                <TabsTrigger value="all">All Records</TabsTrigger>
+                <TabsTrigger value="income">Income</TabsTrigger>
+                <TabsTrigger value="expenses">All Expenses</TabsTrigger>
+                <TabsTrigger value="salaries">Salaries</TabsTrigger>
+                <TabsTrigger value="maintenance">Maintenance</TabsTrigger>
+                </TabsList>
+                <TabsContent value="all">
+                <FinanceTable data={filteredData} isLoading={isLoading} />
+                </TabsContent>
+                <TabsContent value="income">
+                <FinanceTable data={incomeData} isLoading={isLoading} />
+                </TabsContent>
+                 <TabsContent value="expenses">
+                <FinanceTable data={expensesData} isLoading={isLoading} />
+                </TabsContent>
+                <TabsContent value="salaries">
+                <FinanceTable data={salariesData} isLoading={isLoading} />
+                </TabsContent>
+                <TabsContent value="maintenance">
+                <FinanceTable data={maintenanceData} isLoading={isLoading} />
+                </TabsContent>
+            </Tabs>
+            </CardContent>
+        </Card>
+      </div>
       <NewEntryDialog
         open={isNewEntryDialogOpen}
         onOpenChange={setIsNewEntryDialogOpen}
