@@ -25,6 +25,7 @@ import {
 import { collection, Timestamp, addDoc } from "firebase/firestore";
 import { format, startOfWeek, endOfWeek, startOfMonth, endOfMonth, startOfYear, endOfYear, startOfDay, endOfDay } from "date-fns";
 import { enUS } from 'date-fns/locale';
+import type { DateRange } from "react-day-picker";
 
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -481,7 +482,7 @@ function NewEntryDialog({
     );
 }
 
-type DateRangePreset = "all" | "today" | "week" | "month" | "year";
+type DateRangePreset = "all" | "today" | "week" | "month" | "year" | "custom";
 
 export default function FinancePage() {
   const firestore = useFirestore();
@@ -490,41 +491,58 @@ export default function FinancePage() {
   const { toast } = useToast();
   
   const [isNewEntryDialogOpen, setIsNewEntryDialogOpen] = React.useState(false);
-  const [dateRange, setDateRange] = React.useState<DateRangePreset>("all");
+  const [dateRangePreset, setDateRangePreset] = React.useState<DateRangePreset>("all");
+  const [customDateRange, setCustomDateRange] = React.useState<DateRange | undefined>();
+
+  const handlePresetChange = (value: string) => {
+    const preset = value as DateRangePreset;
+    setDateRangePreset(preset);
+    if (preset !== 'custom') {
+      setCustomDateRange(undefined);
+    }
+  }
 
   const filteredData = React.useMemo(() => {
     if (!data) return [];
-    const now = new Date();
+    
     let startDate: Date | null = null;
     let endDate: Date | null = null;
+    const now = new Date();
 
-    switch (dateRange) {
-        case "today":
-            startDate = startOfDay(now);
-            endDate = endOfDay(now);
-            break;
-        case "week":
-            startDate = startOfWeek(now, { weekStartsOn: 1 });
-            endDate = endOfWeek(now, { weekStartsOn: 1 });
-            break;
-        case "month":
-            startDate = startOfMonth(now);
-            endDate = endOfMonth(now);
-            break;
-        case "year":
-            startDate = startOfYear(now);
-            endDate = endOfYear(now);
-            break;
-        case "all":
-        default:
-            return data;
+    if (dateRangePreset === 'custom' && customDateRange?.from) {
+        startDate = startOfDay(customDateRange.from);
+        endDate = customDateRange.to ? endOfDay(customDateRange.to) : endOfDay(customDateRange.from);
+    } else {
+        switch (dateRangePreset) {
+            case "today":
+                startDate = startOfDay(now);
+                endDate = endOfDay(now);
+                break;
+            case "week":
+                startDate = startOfWeek(now, { weekStartsOn: 1 });
+                endDate = endOfWeek(now, { weekStartsOn: 1 });
+                break;
+            case "month":
+                startDate = startOfMonth(now);
+                endDate = endOfMonth(now);
+                break;
+            case "year":
+                startDate = startOfYear(now);
+                endDate = endOfYear(now);
+                break;
+            case "all":
+            default:
+                return data;
+        }
     }
+
+    if (!startDate || !endDate) return data;
 
     return data.filter(record => {
         const recordDate = record.date.toDate();
         return recordDate >= startDate! && recordDate <= endDate!;
     });
-  }, [data, dateRange]);
+  }, [data, dateRangePreset, customDateRange]);
 
 
   const { totalIncome, totalExpenses, netBalance } = React.useMemo(() => {
@@ -568,7 +586,46 @@ export default function FinancePage() {
                 </p>
             </div>
             <div className="flex items-center gap-2">
-                <Select onValueChange={(value) => setDateRange(value as DateRangePreset)} value={dateRange}>
+                <Popover>
+                    <PopoverTrigger asChild>
+                        <Button
+                            id="date"
+                            variant={"outline"}
+                            className={cn(
+                                "w-[300px] justify-start text-left font-normal",
+                                !customDateRange && "text-muted-foreground"
+                            )}
+                        >
+                            <CalendarIcon className="mr-2 h-4 w-4" />
+                            {customDateRange?.from ? (
+                                customDateRange.to ? (
+                                    <>
+                                        {format(customDateRange.from, "LLL dd, y")} -{" "}
+                                        {format(customDateRange.to, "LLL dd, y")}
+                                    </>
+                                ) : (
+                                    format(customDateRange.from, "LLL dd, y")
+                                )
+                            ) : (
+                                <span>Pick a date range</span>
+                            )}
+                        </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="end">
+                        <Calendar
+                            initialFocus
+                            mode="range"
+                            defaultMonth={customDateRange?.from}
+                            selected={customDateRange}
+                            onSelect={(range) => {
+                                setDateRangePreset('custom');
+                                setCustomDateRange(range);
+                            }}
+                            numberOfMonths={2}
+                        />
+                    </PopoverContent>
+                </Popover>
+                <Select onValueChange={handlePresetChange} value={dateRangePreset}>
                     <SelectTrigger className="w-[180px]">
                         <SelectValue placeholder="Select a date range" />
                     </SelectTrigger>
@@ -578,6 +635,7 @@ export default function FinancePage() {
                         <SelectItem value="week">This Week</SelectItem>
                         <SelectItem value="month">This Month</SelectItem>
                         <SelectItem value="year">This Year</SelectItem>
+                        <SelectItem value="custom" disabled>Custom Range</SelectItem>
                     </SelectContent>
                 </Select>
                  <Button onClick={() => setIsNewEntryDialogOpen(true)}>
