@@ -27,6 +27,8 @@ export interface Employee {
   contactInfo: string;
   salary: number;
   profilePhotoUrl?: string;
+  salaryPayday: number; // Day of the month (1-31)
+  lastPaidDate?: Timestamp;
 }
 
 export type TripStatus = "Scheduled" | "In Progress" | "Completed" | "Cancelled";

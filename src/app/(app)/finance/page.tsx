@@ -22,7 +22,7 @@ import {
   getFacetedRowModel,
   getFacetedUniqueValues,
 } from "@tanstack/react-table";
-import { collection, Timestamp, addDoc } from "firebase/firestore";
+import { collection, Timestamp, addDoc, doc, updateDoc } from "firebase/firestore";
 import { format, startOfWeek, endOfWeek, startOfMonth, endOfMonth, startOfYear, endOfYear, startOfDay, endOfDay } from "date-fns";
 import { enUS } from 'date-fns/locale';
 import type { DateRange } from "react-day-picker";
@@ -76,10 +76,11 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
-import type { FinanceRecord } from "@/lib/types";
+import type { FinanceRecord, Employee } from "@/lib/types";
 import { useFirestore, useCollection, useMemoFirebase } from "@/firebase";
 import { useToast } from "@/hooks/use-toast";
 import { KpiCard } from "@/components/dashboard/KpiCard";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 const financeRecordTypes: FinanceRecord["type"][] = ["Income", "Expense"];
 const financeRecordCategories: FinanceRecord["category"][] = ["Ticket Sale", "Salary", "Maintenance", "Rent", "Other"];
@@ -482,12 +483,89 @@ function NewEntryDialog({
     );
 }
 
+function PayrollTab({ employees, onMarkAsPaid }: { employees: Employee[], onMarkAsPaid: (employee: Employee) => Promise<void> }) {
+    const [isLoading, setIsLoading] = React.useState<Record<string, boolean>>({});
+    
+    const now = new Date();
+    const currentMonth = now.getMonth();
+    const currentYear = now.getFullYear();
+  
+    const upcomingPayments = React.useMemo(() => {
+        return employees.filter(emp => {
+            if (!emp.salaryPayday) return false;
+
+            const lastPaidDate = emp.lastPaidDate?.toDate();
+            // If never paid, it's due
+            if (!lastPaidDate) return true;
+
+            // If last paid was in a previous month, it's due
+            if (lastPaidDate.getFullYear() < currentYear || lastPaidDate.getMonth() < currentMonth) {
+                return true;
+            }
+
+            // If last paid this month, but before this month's payday, it's not due again.
+            // This case should ideally not happen with correct logic, but it's a safeguard.
+            if (lastPaidDate.getMonth() === currentMonth && lastPaidDate.getFullYear() === currentYear) {
+                return false;
+            }
+
+            return false;
+        });
+    }, [employees, currentMonth, currentYear]);
+
+    const handleMarkAsPaid = async (employee: Employee) => {
+        setIsLoading(prev => ({ ...prev, [employee.id]: true }));
+        try {
+            await onMarkAsPaid(employee);
+        } finally {
+            setIsLoading(prev => ({ ...prev, [employee.id]: false }));
+        }
+    }
+
+    if (employees.length === 0) {
+        return <div className="text-center text-muted-foreground py-10">No employees found.</div>
+    }
+
+    return (
+      <div className="space-y-4 pt-4">
+        {upcomingPayments.length === 0 ? (
+             <div className="text-center text-muted-foreground py-10">All salaries for this month have been paid.</div>
+        ) : (
+            upcomingPayments.map(emp => (
+                <Card key={emp.id} className="flex items-center p-4">
+                    <Avatar className="h-10 w-10">
+                        <AvatarImage src={emp.profilePhotoUrl} alt={emp.fullName} />
+                        <AvatarFallback>{emp.fullName.charAt(0)}</AvatarFallback>
+                    </Avatar>
+                    <div className="ml-4 flex-grow">
+                        <p className="font-semibold">{emp.fullName}</p>
+                        <p className="text-sm text-muted-foreground">
+                            Due on: {format(new Date(currentYear, currentMonth, emp.salaryPayday), 'MMM do')}
+                        </p>
+                    </div>
+                    <div className="text-right mr-4">
+                        <p className="font-semibold">{new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(emp.salary)}</p>
+                        <p className="text-sm text-muted-foreground">Salary</p>
+                    </div>
+                    <Button onClick={() => handleMarkAsPaid(emp)} disabled={isLoading[emp.id]}>
+                        {isLoading[emp.id] ? "Processing..." : "Mark as Paid"}
+                    </Button>
+                </Card>
+            ))
+        )}
+      </div>
+    )
+}
+
 type DateRangePreset = "all" | "today" | "week" | "month" | "year" | "custom";
 
 export default function FinancePage() {
   const firestore = useFirestore();
   const financeQuery = useMemoFirebase(() => collection(firestore, "financeRecords"), [firestore]);
   const { data, isLoading } = useCollection<FinanceRecord>(financeQuery);
+  const employeesQuery = useMemoFirebase(() => collection(firestore, "employees"), [firestore]);
+  const { data: employees, isLoading: isLoadingEmployees } = useCollection<Employee>(employeesQuery);
+
   const { toast } = useToast();
   
   const [isNewEntryDialogOpen, setIsNewEntryDialogOpen] = React.useState(false);
@@ -570,6 +648,29 @@ export default function FinancePage() {
         toast({ variant: "destructive", title: "Error", description: "Could not create the new entry."});
     }
   };
+
+  const handleMarkSalaryAsPaid = async (employee: Employee) => {
+    const financeCollection = collection(firestore, 'financeRecords');
+    const employeeRef = doc(firestore, 'employees', employee.id);
+    const paymentDate = Timestamp.now();
+
+    const salaryRecord: Omit<FinanceRecord, 'id'> = {
+        type: 'Expense',
+        category: 'Salary',
+        amount: employee.salary,
+        date: paymentDate,
+        description: `Salary for ${employee.fullName} - ${format(paymentDate.toDate(), 'MMMM yyyy')}`
+    };
+
+    try {
+        await addDoc(financeCollection, salaryRecord);
+        await updateDoc(employeeRef, { lastPaidDate: paymentDate });
+        toast({ title: "Salary Paid", description: `${employee.fullName}'s salary has been recorded as an expense.` });
+    } catch (error) {
+        console.error("Error marking salary as paid:", error);
+        toast({ variant: "destructive", title: "Error", description: "Could not process the salary payment." });
+    }
+  }
   
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(value);
@@ -659,27 +760,31 @@ export default function FinancePage() {
             </CardHeader>
             <CardContent>
             <Tabs defaultValue="all">
-                <TabsList className="grid w-full grid-cols-5">
-                <TabsTrigger value="all">All Records</TabsTrigger>
-                <TabsTrigger value="income">Income</TabsTrigger>
-                <TabsTrigger value="expenses">All Expenses</TabsTrigger>
-                <TabsTrigger value="salaries">Salaries</TabsTrigger>
-                <TabsTrigger value="maintenance">Maintenance</TabsTrigger>
+                <TabsList className="grid w-full grid-cols-6">
+                    <TabsTrigger value="all">All Records</TabsTrigger>
+                    <TabsTrigger value="income">Income</TabsTrigger>
+                    <TabsTrigger value="expenses">All Expenses</TabsTrigger>
+                    <TabsTrigger value="salaries">Salaries</TabsTrigger>
+                    <TabsTrigger value="maintenance">Maintenance</TabsTrigger>
+                    <TabsTrigger value="payroll">Payroll</TabsTrigger>
                 </TabsList>
                 <TabsContent value="all">
-                <FinanceTable data={filteredData} isLoading={isLoading} />
+                    <FinanceTable data={filteredData} isLoading={isLoading} />
                 </TabsContent>
                 <TabsContent value="income">
-                <FinanceTable data={incomeData} isLoading={isLoading} />
+                    <FinanceTable data={incomeData} isLoading={isLoading} />
                 </TabsContent>
                  <TabsContent value="expenses">
-                <FinanceTable data={expensesData} isLoading={isLoading} />
+                    <FinanceTable data={expensesData} isLoading={isLoading} />
                 </TabsContent>
                 <TabsContent value="salaries">
-                <FinanceTable data={salariesData} isLoading={isLoading} />
+                    <FinanceTable data={salariesData} isLoading={isLoading} />
                 </TabsContent>
                 <TabsContent value="maintenance">
-                <FinanceTable data={maintenanceData} isLoading={isLoading} />
+                    <FinanceTable data={maintenanceData} isLoading={isLoading} />
+                </TabsContent>
+                <TabsContent value="payroll">
+                    <PayrollTab employees={employees ?? []} onMarkAsPaid={handleMarkSalaryAsPaid} />
                 </TabsContent>
             </Tabs>
             </CardContent>
@@ -693,5 +798,3 @@ export default function FinancePage() {
     </>
   );
 }
-
-    

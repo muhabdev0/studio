@@ -108,6 +108,7 @@ function EditEmployeeDialog({
     const [role, setRole] = React.useState<UserRole>("Employee");
     const [contactInfo, setContactInfo] = React.useState("");
     const [salary, setSalary] = React.useState<number>(0);
+    const [salaryPayday, setSalaryPayday] = React.useState<number>(1);
     const [profilePhotoUrl, setProfilePhotoUrl] = React.useState<string | null>(null);
     const [isLoading, setIsLoading] = React.useState(false);
     const { toast } = useToast();
@@ -118,6 +119,7 @@ function EditEmployeeDialog({
         setRole(employee.role);
         setContactInfo(employee.contactInfo);
         setSalary(employee.salary);
+        setSalaryPayday(employee.salaryPayday || 1);
         setProfilePhotoUrl(employee.profilePhotoUrl || null);
       }
     }, [employee]);
@@ -134,8 +136,8 @@ function EditEmployeeDialog({
     };
 
     const handleUpdateEmployee = async () => {
-      if (!employee || !fullName || !role || !contactInfo || salary <= 0) {
-          toast({ variant: "destructive", title: "Missing Information", description: "Please fill out all required fields."});
+      if (!employee || !fullName || !role || !contactInfo || salary <= 0 || salaryPayday < 1 || salaryPayday > 31) {
+          toast({ variant: "destructive", title: "Missing Information", description: "Please fill out all required fields correctly."});
           return;
       }
       
@@ -145,6 +147,7 @@ function EditEmployeeDialog({
         role,
         contactInfo,
         salary,
+        salaryPayday,
         profilePhotoUrl: profilePhotoUrl || `https://picsum.photos/seed/${fullName}/100/100`,
       };
       
@@ -204,6 +207,12 @@ function EditEmployeeDialog({
               <Input id="salary" type="number" value={salary} onChange={e => setSalary(Number(e.target.value))} className="col-span-3" />
             </div>
             <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="salaryPayday" className="text-right">
+                Salary Payday
+              </Label>
+              <Input id="salaryPayday" type="number" min="1" max="31" value={salaryPayday} onChange={e => setSalaryPayday(Number(e.target.value))} className="col-span-3" />
+            </div>
+            <div className="grid grid-cols-4 items-center gap-4">
                 <Label htmlFor="image" className="text-right">
                 Photo
                 </Label>
@@ -241,6 +250,7 @@ function NewEmployeeDialog({
   const [role, setRole] = React.useState<UserRole>("Employee");
   const [contactInfo, setContactInfo] = React.useState("");
   const [salary, setSalary] = React.useState<number>(0);
+  const [salaryPayday, setSalaryPayday] = React.useState<number>(1);
   const [profilePhotoUrl, setProfilePhotoUrl] = React.useState<string | null>(null);
   const [isLoading, setIsLoading] = React.useState(false);
   const { toast } = useToast();
@@ -250,6 +260,7 @@ function NewEmployeeDialog({
     setRole("Employee");
     setContactInfo("");
     setSalary(0);
+    setSalaryPayday(1);
     setProfilePhotoUrl(null);
   }
 
@@ -265,8 +276,8 @@ function NewEmployeeDialog({
   };
 
   const handleCreateEmployee = async () => {
-    if (!fullName || !role || !contactInfo || salary <= 0) {
-        toast({ variant: "destructive", title: "Missing Information", description: "Please fill out all required fields."});
+    if (!fullName || !role || !contactInfo || salary <= 0 || salaryPayday < 1 || salaryPayday > 31) {
+        toast({ variant: "destructive", title: "Missing Information", description: "Please fill out all required fields correctly."});
         return;
     }
     
@@ -276,6 +287,7 @@ function NewEmployeeDialog({
       role,
       contactInfo,
       salary,
+      salaryPayday,
       profilePhotoUrl: profilePhotoUrl || `https://picsum.photos/seed/${fullName}/100/100`
     };
     
@@ -333,6 +345,12 @@ function NewEmployeeDialog({
             </Label>
             <Input id="salary" type="number" value={salary} onChange={e => setSalary(Number(e.target.value))} className="col-span-3" />
           </div>
+          <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="salaryPayday" className="text-right">
+                Salary Payday
+              </Label>
+              <Input id="salaryPayday" type="number" min="1" max="31" value={salaryPayday} onChange={e => setSalaryPayday(Number(e.target.value))} className="col-span-3" />
+            </div>
            <div className="grid grid-cols-4 items-center gap-4">
                 <Label htmlFor="image" className="text-right">
                 Photo
@@ -461,6 +479,14 @@ export default function EmployeesPage() {
         return <div className="text-right font-medium">{formatted}</div>;
       },
     },
+    {
+        accessorKey: "salaryPayday",
+        header: () => <div className="text-center">Salary Payday</div>,
+        cell: ({ row }) => {
+          const day = row.getValue("salaryPayday");
+          return <div className="text-center">{day}</div>;
+        },
+      },
     {
       id: "actions",
       enableHiding: false,
