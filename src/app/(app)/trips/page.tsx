@@ -83,8 +83,9 @@ import {
 } from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
 import type { Trip, Bus, Employee, TripStatus } from "@/lib/types";
-import { useFirestore, useCollection, useMemoFirebase } from "@/firebase";
+import { useFirestore } from "@/firebase";
 import { useToast } from "@/hooks/use-toast";
+import { useDataCache } from "@/lib/data-cache";
 
 const tripStatuses: TripStatus[] = ["Scheduled", "In Progress", "Completed", "Cancelled"];
 
@@ -420,14 +421,12 @@ export default function TripsPage() {
   const firestore = useFirestore();
   const { toast } = useToast();
 
-  const tripsQuery = useMemoFirebase(() => collection(firestore, "trips"), [firestore]);
-  const { data: trips, isLoading: isLoadingTrips } = useCollection<Trip>(tripsQuery);
-  
-  const busesQuery = useMemoFirebase(() => collection(firestore, "buses"), [firestore]);
-  const { data: buses, isLoading: isLoadingBuses } = useCollection<Bus>(busesQuery);
-  
-  const employeesQuery = useMemoFirebase(() => collection(firestore, "employees"), [firestore]);
-  const { data: employees, isLoading: isLoadingEmployees } = useCollection<Employee>(employeesQuery);
+  const {
+    tripsData: trips,
+    busesData: buses,
+    employeesData: employees,
+    isLoading,
+  } = useDataCache();
   
   const [sorting, setSorting] = React.useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([]);
@@ -627,8 +626,6 @@ export default function TripsPage() {
     },
   });
 
-  const isLoading = isLoadingTrips || isLoadingBuses || isLoadingEmployees;
-
   return (
     <>
       <Card>
@@ -803,5 +800,3 @@ export default function TripsPage() {
     </>
   );
 }
-
-    

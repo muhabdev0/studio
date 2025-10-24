@@ -78,8 +78,9 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import type { Trip, TicketBooking, FinanceRecord } from "@/lib/types";
-import { useFirestore, useCollection, useMemoFirebase } from "@/firebase";
+import { useFirestore } from "@/firebase";
 import { useToast } from "@/hooks/use-toast";
+import { useDataCache } from "@/lib/data-cache";
 
 function EditBookingDialog({
     open,
@@ -274,6 +275,11 @@ function EditBookingDialog({
 export default function BookingsPage() {
   const firestore = useFirestore();
   const { toast } = useToast();
+  const { 
+    bookingsData, 
+    tripsData, 
+    isLoading: isCacheLoading 
+  } = useDataCache();
 
   const [sorting, setSorting] = React.useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([]);
@@ -284,13 +290,8 @@ export default function BookingsPage() {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = React.useState(false);
   const [selectedBooking, setSelectedBooking] = React.useState<TicketBooking | null>(null);
 
-  const bookingsQuery = useMemoFirebase(() => collection(firestore, "ticketBookings"), [firestore]);
-  const { data: bookingsData, isLoading: isLoadingBookings } = useCollection<TicketBooking>(bookingsQuery);
-  
-  const tripsQuery = useMemoFirebase(() => collection(firestore, "trips"), [firestore]);
-  const { data: tripsData, isLoading: isLoadingTrips } = useCollection<Trip>(tripsQuery);
-
   const handleBookingCreated = async (newBooking: Omit<TicketBooking, "id">) => {
+    if (!firestore) return;
     const bookingsCollection = collection(firestore, 'ticketBookings');
     const financeCollection = collection(firestore, 'financeRecords');
     const tripRef = doc(firestore, 'trips', newBooking.tripId);
@@ -322,6 +323,7 @@ export default function BookingsPage() {
   };
 
   const handleBookingUpdated = async (bookingId: string, oldTripId: string, oldSeat: number, updatedData: Partial<TicketBooking>) => {
+    if (!firestore) return;
     const bookingRef = doc(firestore, 'ticketBookings', bookingId);
     
     try {
@@ -354,7 +356,7 @@ export default function BookingsPage() {
   };
 
   const handleDeleteBooking = async () => {
-    if (!selectedBooking) return;
+    if (!selectedBooking || !firestore) return;
     const bookingRef = doc(firestore, "ticketBookings", selectedBooking.id);
     const tripRef = doc(firestore, 'trips', selectedBooking.tripId);
     
@@ -533,8 +535,6 @@ export default function BookingsPage() {
     },
   });
 
-  const isLoading = isLoadingBookings || isLoadingTrips;
-
   return (
     <>
       <Card>
@@ -615,7 +615,7 @@ export default function BookingsPage() {
                   ))}
                 </TableHeader>
                 <TableBody>
-                  {isLoading ? (
+                  {isCacheLoading ? (
                     <TableRow>
                         <TableCell colSpan={columns.length} className="h-24 text-center">
                             Loading...
@@ -880,5 +880,3 @@ function NewBookingDialog({
     </Dialog>
   );
 }
-
-    

@@ -7,6 +7,7 @@ import { useUser } from "@/firebase";
 import { AppSidebar } from "@/components/layout/Sidebar";
 import { Header } from "@/components/layout/Header";
 import { SidebarProvider } from "@/components/ui/sidebar";
+import { DataCacheProvider } from "@/lib/data-cache";
 
 function Loading() {
   return (
@@ -42,17 +43,19 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <SidebarProvider>
-      <div className="flex min-h-screen w-full flex-row bg-muted/40">
-        <AppSidebar />
-        <div className="flex flex-1 flex-col">
-          <Header />
-          <main className="flex-1 p-4 sm:px-6 sm:py-6">
-            <Suspense fallback={<Loading />}>
-              {children}
-            </Suspense>
-          </main>
+      <DataCacheProvider>
+        <div className="flex min-h-screen w-full flex-row bg-muted/40">
+          <AppSidebar />
+          <div className="flex flex-1 flex-col">
+            <Header />
+            <main className="flex-1 p-4 sm:px-6 sm:py-6">
+              <Suspense fallback={<Loading />}>
+                {children}
+              </Suspense>
+            </main>
+          </div>
         </div>
-      </div>
+      </DataCacheProvider>
     </SidebarProvider>
   );
 }

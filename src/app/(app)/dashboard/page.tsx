@@ -1,28 +1,21 @@
+
 "use client";
 
 import { DollarSign, Users, Bus, Route } from "lucide-react";
 import { KpiCard } from "@/components/dashboard/KpiCard";
 import { OverviewChart } from "@/components/dashboard/OverviewChart";
 import { RecentBookings } from "@/components/dashboard/RecentBookings";
-import { useFirestore, useCollection, useMemoFirebase } from "@/firebase";
-import { collection } from "firebase/firestore";
-import type { FinanceRecord, TicketBooking, Bus as BusType, Trip } from "@/lib/types";
+import { useDataCache } from "@/lib/data-cache";
 import { useMemo } from "react";
 
 export default function DashboardPage() {
-  const firestore = useFirestore();
-
-  const financeQuery = useMemoFirebase(() => collection(firestore, "financeRecords"), [firestore]);
-  const { data: financeData, isLoading: isLoadingFinance } = useCollection<FinanceRecord>(financeQuery);
-
-  const bookingsQuery = useMemoFirebase(() => collection(firestore, "ticketBookings"), [firestore]);
-  const { data: bookingsData, isLoading: isLoadingBookings } = useCollection<TicketBooking>(bookingsQuery);
-
-  const busesQuery = useMemoFirebase(() => collection(firestore, "buses"), [firestore]);
-  const { data: busesData, isLoading: isLoadingBuses } = useCollection<BusType>(busesQuery);
-
-  const tripsQuery = useMemoFirebase(() => collection(firestore, "trips"), [firestore]);
-  const { data: tripsData, isLoading: isLoadingTrips } = useCollection<Trip>(tripsQuery);
+  const { 
+    financeData, 
+    bookingsData, 
+    busesData, 
+    tripsData,
+    isLoading: isCacheLoading 
+  } = useDataCache();
 
   const { totalRevenue, totalPassengers, activeBuses, tripsThisMonth } = useMemo(() => {
     const revenue = financeData?.filter(r => r.type === "Income").reduce((acc, r) => acc + r.amount, 0) ?? 0;
@@ -41,8 +34,6 @@ export default function DashboardPage() {
     };
   }, [financeData, bookingsData, busesData, tripsData]);
 
-  const isLoading = isLoadingFinance || isLoadingBookings || isLoadingBuses || isLoadingTrips;
-
   return (
     <div className="flex-1 space-y-4">
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
@@ -50,31 +41,31 @@ export default function DashboardPage() {
           title="Total Revenue"
           value={new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(totalRevenue)}
           icon={DollarSign}
-          isLoading={isLoading}
+          isLoading={isCacheLoading}
         />
         <KpiCard
           title="Total Passengers"
           value={totalPassengers.toString()}
           icon={Users}
-          isLoading={isLoading}
+          isLoading={isCacheLoading}
         />
         <KpiCard
           title="Active Buses"
           value={activeBuses.toString()}
           icon={Bus}
           description={`${busesData?.filter(b => b.maintenanceStatus === "Maintenance").length ?? 0} in maintenance`}
-          isLoading={isLoading}
+          isLoading={isCacheLoading}
         />
         <KpiCard
           title="Trips this Month"
           value={tripsThisMonth.toString()}
           icon={Route}
-          isLoading={isLoading}
+          isLoading={isCacheLoading}
         />
       </div>
       <div className="grid gap-4 md:grid-cols-1 lg:grid-cols-3">
-        <OverviewChart financeData={financeData} isLoading={isLoadingFinance} />
-        <RecentBookings bookingsData={bookingsData?.slice(0, 5)} isLoading={isLoadingBookings} />
+        <OverviewChart financeData={financeData} isLoading={isCacheLoading} />
+        <RecentBookings bookingsData={bookingsData?.slice(0, 5)} isLoading={isCacheLoading} />
       </div>
     </div>
   );

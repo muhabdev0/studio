@@ -77,10 +77,11 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import type { FinanceRecord, Employee } from "@/lib/types";
-import { useFirestore, useCollection, useMemoFirebase } from "@/firebase";
+import { useFirestore } from "@/firebase";
 import { useToast } from "@/hooks/use-toast";
 import { KpiCard } from "@/components/dashboard/KpiCard";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { useDataCache } from "@/lib/data-cache";
 
 const financeRecordTypes: FinanceRecord["type"][] = ["Income", "Expense"];
 const financeRecordCategories: FinanceRecord["category"][] = ["Ticket Sale", "Salary", "Maintenance", "Rent", "Other"];
@@ -570,10 +571,11 @@ type DateRangePreset = "all" | "today" | "week" | "month" | "year" | "custom";
 
 export default function FinancePage() {
   const firestore = useFirestore();
-  const financeQuery = useMemoFirebase(() => collection(firestore, "financeRecords"), [firestore]);
-  const { data, isLoading } = useCollection<FinanceRecord>(financeQuery);
-  const employeesQuery = useMemoFirebase(() => collection(firestore, "employees"), [firestore]);
-  const { data: employees, isLoading: isLoadingEmployees } = useCollection<Employee>(employeesQuery);
+  const { 
+    financeData: data, 
+    employeesData: employees, 
+    isLoading 
+  } = useDataCache();
 
   const { toast } = useToast();
   

@@ -79,8 +79,9 @@ import {
     AlertDialogTitle,
   } from "@/components/ui/alert-dialog";
 import type { Employee, UserRole } from "@/lib/types";
-import { useFirestore, useCollection, useMemoFirebase } from "@/firebase";
+import { useFirestore } from "@/firebase";
 import { useToast } from "@/hooks/use-toast";
+import { useDataCache } from "@/lib/data-cache";
 
 const userRoles: UserRole[] = ["Admin", "Manager", "Driver", "Employee", "Mechanic"];
 
@@ -379,8 +380,7 @@ function NewEmployeeDialog({
 
 export default function EmployeesPage() {
   const firestore = useFirestore();
-  const employeesQuery = useMemoFirebase(() => collection(firestore, "employees"), [firestore]);
-  const { data: employeesData, isLoading } = useCollection<Employee>(employeesQuery);
+  const { data: employeesData, isLoading } = useDataCache();
   const { toast } = useToast();
 
   const [sorting, setSorting] = React.useState<SortingState>([]);

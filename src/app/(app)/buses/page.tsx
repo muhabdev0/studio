@@ -42,7 +42,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { Bus } from "@/lib/types";
-import { useFirestore, useCollection, useMemoFirebase } from "@/firebase";
+import { useFirestore } from "@/firebase";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -54,6 +54,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
+import { useDataCache } from "@/lib/data-cache";
 
 const maintenanceStatuses: Bus["maintenanceStatus"][] = ["Operational", "Maintenance", "Out of Service"];
 
@@ -211,8 +212,7 @@ const StatusBadge = ({ status }: { status: Bus["maintenanceStatus"] }) => {
 
 export default function BusesPage() {
   const firestore = useFirestore();
-  const busesQuery = useMemoFirebase(() => collection(firestore, "buses"), [firestore]);
-  const { data: busesData, isLoading } = useCollection<Bus>(busesQuery);
+  const { data: busesData, isLoading } = useDataCache();
   const { toast } = useToast();
   
   const [isNewBusDialogOpen, setIsNewBusDialogOpen] = React.useState(false);
@@ -388,5 +388,3 @@ export default function BusesPage() {
     </>
   );
 }
-
-    
