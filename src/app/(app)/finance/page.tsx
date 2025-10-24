@@ -489,29 +489,38 @@ function PayrollTab({ employees, onMarkAsPaid }: { employees: Employee[], onMark
     const now = new Date();
     const currentMonth = now.getMonth();
     const currentYear = now.getFullYear();
+    const today = now.getDate();
   
     const upcomingPayments = React.useMemo(() => {
         return employees.filter(emp => {
             if (!emp.salaryPayday) return false;
+            
+            const payday = emp.salaryPayday;
+
+            // Only consider paydays that are in the current month or have passed
+            if (payday > today) return false;
 
             const lastPaidDate = emp.lastPaidDate?.toDate();
-            // If never paid, it's due
-            if (!lastPaidDate) return true;
 
-            // If last paid was in a previous month, it's due
-            if (lastPaidDate.getFullYear() < currentYear || lastPaidDate.getMonth() < currentMonth) {
-                return true;
+            // If never paid, and payday has passed, it's due
+            if (!lastPaidDate && payday <= today) return true;
+
+            if (lastPaidDate) {
+                const lastPaidMonth = lastPaidDate.getMonth();
+                const lastPaidYear = lastPaidDate.getFullYear();
+
+                // If last paid in a previous month, and payday has passed, it's due
+                if (lastPaidYear < currentYear || (lastPaidYear === currentYear && lastPaidMonth < currentMonth)) {
+                    return true;
+                }
             }
 
-            // If last paid this month, but before this month's payday, it's not due again.
-            // This case should ideally not happen with correct logic, but it's a safeguard.
-            if (lastPaidDate.getMonth() === currentMonth && lastPaidDate.getFullYear() === currentYear) {
-                return false;
-            }
+            // If never paid, it is due
+            if(!lastPaidDate) return true;
 
             return false;
         });
-    }, [employees, currentMonth, currentYear]);
+    }, [employees, currentMonth, currentYear, today]);
 
     const handleMarkAsPaid = async (employee: Employee) => {
         setIsLoading(prev => ({ ...prev, [employee.id]: true }));
@@ -529,7 +538,7 @@ function PayrollTab({ employees, onMarkAsPaid }: { employees: Employee[], onMark
     return (
       <div className="space-y-4 pt-4">
         {upcomingPayments.length === 0 ? (
-             <div className="text-center text-muted-foreground py-10">All salaries for this month have been paid.</div>
+             <div className="text-center text-muted-foreground py-10">All salaries for this month have been paid or are not yet due.</div>
         ) : (
             upcomingPayments.map(emp => (
                 <Card key={emp.id} className="flex items-center p-4">
@@ -540,7 +549,7 @@ function PayrollTab({ employees, onMarkAsPaid }: { employees: Employee[], onMark
                     <div className="ml-4 flex-grow">
                         <p className="font-semibold">{emp.fullName}</p>
                         <p className="text-sm text-muted-foreground">
-                            Due on: {format(new Date(currentYear, currentMonth, emp.salaryPayday), 'MMM do')}
+                            Payment due for: {format(new Date(currentYear, currentMonth, emp.salaryPayday), 'MMMM yyyy')}
                         </p>
                     </div>
                     <div className="text-right mr-4">
