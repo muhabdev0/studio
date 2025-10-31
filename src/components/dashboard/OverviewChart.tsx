@@ -16,11 +16,11 @@ import { Skeleton } from "@/components/ui/skeleton";
 const chartConfig = {
   income: {
     label: "Income",
-    color: "hsl(var(--primary))",
+    color: "hsl(142.1 76.2% 36.3%)", // Green
   },
   expense: {
     label: "Expense",
-    color: "hsl(var(--accent))",
+    color: "hsl(0 72.2% 50.6%)", // Red
   },
 } satisfies ChartConfig
 
