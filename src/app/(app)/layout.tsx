@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useEffect, useState, Suspense } from "react";
@@ -35,7 +34,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   if (isUserLoading || !user) {
     return (
-      <div className="flex h-screen items-center justify-center">
+      <div className="flex h-screen items-center justify-center bg-background">
         <div className="h-16 w-16 animate-spin rounded-full border-4 border-dashed border-primary"></div>
       </div>
     );
@@ -44,7 +43,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
     <SidebarProvider>
       <DataCacheProvider>
-        <div className="flex min-h-screen w-full flex-row bg-muted/40">
+        <div className="flex min-h-screen w-full flex-row">
           <AppSidebar />
           <div className="flex flex-1 flex-col">
             <Header />

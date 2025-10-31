@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Bus, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { signInWithEmailAndPassword } from "firebase/auth";
 
 import { Button } from "@/components/ui/button";
@@ -11,6 +11,25 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/firebase";
 import { useToast } from "@/hooks/use-toast";
+
+function Logo() {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="h-12 w-12 text-primary"
+    >
+      <path d="M18 6.5C18 9 16 11 13.5 11S9 9 9 6.5" />
+      <path d="M6 17.5C6 15 8 13 10.5 13S15 15 15 17.5" />
+    </svg>
+  )
+}
+
 
 export default function LoginPage() {
   const router = useRouter();
@@ -43,10 +62,11 @@ export default function LoginPage() {
 
   return (
     <main className="flex min-h-screen flex-col items-center justify-center bg-background p-4">
-      <Card className="w-full max-w-sm">
+      <div className="absolute inset-0 -z-10 h-full w-full bg-background bg-[linear-gradient(to_right,#8080800a_1px,transparent_1px),linear-gradient(to_bottom,#8080800a_1px,transparent_1px)] bg-[size:14px_24px]"></div>
+      <Card className="w-full max-w-sm border-0 bg-card/80 backdrop-blur-sm">
         <CardHeader className="text-center">
           <div className="mb-4 flex justify-center">
-            <Bus className="h-12 w-12 text-primary" />
+            <Logo />
           </div>
           <CardTitle className="text-2xl font-bold">SwiftRoute</CardTitle>
           <CardDescription>Enter your credentials to access your account</CardDescription>
