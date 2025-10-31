@@ -17,14 +17,10 @@ function Logo() {
     <svg
       viewBox="0 0 24 24"
       fill="none"
-      stroke="currentColor"
-      strokeWidth="2.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
+      xmlns="http://www.w3.org/2000/svg"
       className="h-10 w-10 text-primary"
     >
-      <path d="M17.5 7.5a5 5 0 0 0-5-5h-5" />
-      <path d="M6.5 16.5a5 5 0 0 0 5 5h5" />
+      <path d="M18 8C18 5.79086 16.2091 4 14 4C11.7909 4 10 5.79086 10 8C10 10.2091 11.7909 12 14 12H10C7.79086 12 6 13.7909 6 16C6 18.2091 7.79086 20 10 20C12.2091 20 14 18.2091 14 16" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
     </svg>
   );
 }
