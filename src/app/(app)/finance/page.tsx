@@ -88,7 +88,7 @@ const financeRecordCategories: FinanceRecord["category"][] = ["Ticket Sale", "Sa
 
 const getCategoryBadgeVariant = (category: FinanceRecord["category"]) => {
     switch(category) {
-        case "Ticket Sale": return "default";
+        case "Ticket Sale": return "outline";
         case "Salary": return "destructive";
         case "Maintenance": return "secondary";
         case "Rent": return "secondary";
@@ -809,3 +809,5 @@ export default function FinancePage() {
     </>
   );
 }
+
+    
