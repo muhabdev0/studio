@@ -2,7 +2,7 @@
 "use client";
 
 import React, { createContext, useContext, ReactNode } from 'react';
-import { collection } from 'firebase/firestore';
+import { collection, query, orderBy } from 'firebase/firestore';
 import { useFirestore, useCollection, useMemoFirebase } from '@/firebase';
 import type { Trip, Bus, Employee, TicketBooking, FinanceRecord } from '@/lib/types';
 
@@ -21,19 +21,19 @@ const DataCacheContext = createContext<DataCacheContextType | undefined>(undefin
 export function DataCacheProvider({ children }: { children: ReactNode }) {
     const firestore = useFirestore();
 
-    const tripsQuery = useMemoFirebase(() => collection(firestore, "trips"), [firestore]);
+    const tripsQuery = useMemoFirebase(() => query(collection(firestore, "trips"), orderBy("dateTime", "desc")), [firestore]);
     const { data: tripsData, isLoading: isLoadingTrips, error: tripsError } = useCollection<Trip>(tripsQuery);
     
-    const busesQuery = useMemoFirebase(() => collection(firestore, "buses"), [firestore]);
+    const busesQuery = useMemoFirebase(() => query(collection(firestore, "buses"), orderBy("name", "asc")), [firestore]);
     const { data: busesData, isLoading: isLoadingBuses, error: busesError } = useCollection<Bus>(busesQuery);
     
-    const employeesQuery = useMemoFirebase(() => collection(firestore, "employees"), [firestore]);
+    const employeesQuery = useMemoFirebase(() => query(collection(firestore, "employees"), orderBy("fullName", "asc")), [firestore]);
     const { data: employeesData, isLoading: isLoadingEmployees, error: employeesError } = useCollection<Employee>(employeesQuery);
 
-    const bookingsQuery = useMemoFirebase(() => collection(firestore, "ticketBookings"), [firestore]);
+    const bookingsQuery = useMemoFirebase(() => query(collection(firestore, "ticketBookings"), orderBy("bookingDate", "desc")), [firestore]);
     const { data: bookingsData, isLoading: isLoadingBookings, error: bookingsError } = useCollection<TicketBooking>(bookingsQuery);
 
-    const financeQuery = useMemoFirebase(() => collection(firestore, "financeRecords"), [firestore]);
+    const financeQuery = useMemoFirebase(() => query(collection(firestore, "financeRecords"), orderBy("date", "desc")), [firestore]);
     const { data: financeData, isLoading: isLoadingFinance, error: financeError } = useCollection<FinanceRecord>(financeQuery);
 
 
