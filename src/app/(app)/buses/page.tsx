@@ -4,7 +4,7 @@
 import * as React from "react";
 import Image from "next/image";
 import { PlusCircle, MoreVertical, Pencil, Trash2, Bus as BusIcon } from "lucide-react";
-import { collection, doc, addDoc, updateDoc, deleteDoc } from "firebase/firestore";
+import { collection, doc, addDoc, updateDoc, deleteDoc, query, orderBy } from "firebase/firestore";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -42,7 +42,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { Bus } from "@/lib/types";
-import { useFirestore } from "@/firebase";
+import { useFirestore, useCollection, useMemoFirebase } from "@/firebase";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -54,7 +54,6 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
-import { useDataCache } from "@/lib/data-cache";
 
 const maintenanceStatuses: Bus["maintenanceStatus"][] = ["Operational", "Maintenance", "Out of Service"];
 
@@ -212,7 +211,8 @@ const StatusBadge = ({ status }: { status: Bus["maintenanceStatus"] }) => {
 
 export default function BusesPage() {
   const firestore = useFirestore();
-  const { data: busesData, isLoading } = useDataCache();
+  const busesQuery = useMemoFirebase(() => query(collection(firestore, "buses"), orderBy("name", "asc")), [firestore]);
+  const { data: busesData, isLoading } = useCollection<Bus>(busesQuery);
   const { toast } = useToast();
   
   const [isNewBusDialogOpen, setIsNewBusDialogOpen] = React.useState(false);
@@ -221,7 +221,7 @@ export default function BusesPage() {
   const [selectedBus, setSelectedBus] = React.useState<Bus | null>(null);
 
   const handleDelete = async () => {
-    if (!selectedBus) return;
+    if (!selectedBus || !firestore) return;
     const busRef = doc(firestore, "buses", selectedBus.id);
     try {
         await deleteDoc(busRef);
@@ -235,6 +235,7 @@ export default function BusesPage() {
   };
 
   const handleBusCreated = async (newBus: Partial<Bus>) => {
+    if (!firestore) return;
     const busesCollection = collection(firestore, 'buses');
     try {
         await addDoc(busesCollection, newBus);
@@ -246,7 +247,7 @@ export default function BusesPage() {
   };
 
   const handleBusUpdated = async (updatedBus: Partial<Bus>) => {
-    if (!selectedBus) return;
+    if (!selectedBus || !firestore) return;
     const busRef = doc(firestore, 'buses', selectedBus.id);
     try {
         await updateDoc(busRef, updatedBus);
