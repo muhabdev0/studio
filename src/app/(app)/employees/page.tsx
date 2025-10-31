@@ -21,7 +21,7 @@ import {
   getSortedRowModel,
   useReactTable,
 } from "@tanstack/react-table";
-import { collection, addDoc, doc, updateDoc, deleteDoc } from "firebase/firestore";
+import { collection, addDoc, doc, updateDoc, deleteDoc, Firestore } from "firebase/firestore";
 
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -241,11 +241,11 @@ function EditEmployeeDialog({
 function NewEmployeeDialog({
   open,
   onOpenChange,
-  onEmployeeCreated,
+  firestore
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onEmployeeCreated: (employee: Omit<Employee, "id">) => Promise<void>;
+  firestore: Firestore;
 }) {
   const [fullName, setFullName] = React.useState("");
   const [role, setRole] = React.useState<UserRole>("Employee");
@@ -275,6 +275,18 @@ function NewEmployeeDialog({
         reader.readAsDataURL(file);
     }
   };
+  
+  const handleEmployeeCreated = async (newEmployee: Omit<Employee, "id">) => {
+    const employeesCollection = collection(firestore, 'employees');
+    try {
+        await addDoc(employeesCollection, newEmployee);
+        toast({ title: "Employee Added", description: `${newEmployee.fullName} has been added.` });
+    } catch (error) {
+        console.error("Error creating employee: ", error);
+        toast({ variant: "destructive", title: "Error", description: "Could not add the new employee." });
+    }
+  };
+
 
   const handleCreateEmployee = async () => {
     if (!fullName || !role || !contactInfo || salary <= 0 || salaryPayday < 1 || salaryPayday > 31) {
@@ -293,7 +305,7 @@ function NewEmployeeDialog({
     };
     
     try {
-        await onEmployeeCreated(newEmployee);
+        await handleEmployeeCreated(newEmployee);
         onOpenChange(false);
         resetForm();
     } finally {
@@ -380,7 +392,7 @@ function NewEmployeeDialog({
 
 export default function EmployeesPage() {
   const firestore = useFirestore();
-  const { data: employeesData, isLoading } = useDataCache();
+  const { employeesData, isLoading } = useDataCache();
   const { toast } = useToast();
 
   const [sorting, setSorting] = React.useState<SortingState>([]);
@@ -544,17 +556,6 @@ export default function EmployeesPage() {
       rowSelection,
     },
   });
-
-  const handleEmployeeCreated = async (newEmployee: Omit<Employee, "id">) => {
-    const employeesCollection = collection(firestore, 'employees');
-    try {
-        await addDoc(employeesCollection, newEmployee);
-        toast({ title: "Employee Added", description: `${newEmployee.fullName} has been added.` });
-    } catch (error) {
-        console.error("Error creating employee: ", error);
-        toast({ variant: "destructive", title: "Error", description: "Could not add the new employee." });
-    }
-  };
 
   const handleEmployeeUpdated = async (employeeId: string, updatedData: Partial<Employee>) => {
     const employeeRef = doc(firestore, 'employees', employeeId);
@@ -726,7 +727,7 @@ export default function EmployeesPage() {
       <NewEmployeeDialog 
         open={isNewEmployeeDialogOpen}
         onOpenChange={setIsNewEmployeeDialogOpen}
-        onEmployeeCreated={handleEmployeeCreated}
+        firestore={firestore}
       />
        <EditEmployeeDialog
         open={isEditEmployeeDialogOpen}
@@ -751,3 +752,5 @@ export default function EmployeesPage() {
     </>
   );
 }
+
+    
