@@ -88,7 +88,7 @@ const financeRecordCategories: FinanceRecord["category"][] = ["Ticket Sale", "Sa
 
 const getCategoryBadgeVariant = (category: FinanceRecord["category"]) => {
     switch(category) {
-        case "Ticket Sale": return "outline";
+        case "Ticket Sale": return "default";
         case "Salary": return "destructive";
         case "Maintenance": return "secondary";
         case "Rent": return "secondary";
@@ -136,6 +136,15 @@ export const columns: ColumnDef<FinanceRecord>[] = [
     header: "Category",
     cell: ({ row }) => {
         const category = row.getValue("category") as FinanceRecord["category"];
+        if (category === 'Ticket Sale') {
+          return (
+            <div className="text-center">
+              <span className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold text-white bg-green-600">
+                {category}
+              </span>
+            </div>
+          );
+        }
         return <Badge variant={getCategoryBadgeVariant(category)}>{category}</Badge>
     }
   },
