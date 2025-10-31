@@ -43,19 +43,22 @@ export function AppSidebar() {
       <SidebarHeader>
         <div className="flex items-center gap-2">
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              className="h-5 w-5"
-            >
-              <path d="M6 17.5C6 15 8 13 10.5 13S15 15 15 17.5" />
-              <path d="M18 6.5C18 9 16 11 13.5 11S9 9 9 6.5" />
-            </svg>
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="h-5 w-5 text-white"
+          >
+            <path d="M13.4 2.6L10.6 2.6C8.4 2.6 7.5 4.3 8.1 6.3L10.3 12.8C10.5 13.5 11.2 14 11.9 14H12.1C12.8 14 13.5 13.5 13.7 12.8L15.9 6.3C16.5 4.3 15.6 2.6 13.4 2.6" />
+            <path d="M10.3 12.8L8.1 6.3C7.5 4.3 6.6 2.6 4.4 2.6L1.6 2.6" />
+            <path d="M13.7 12.8L15.9 6.3C16.5 4.3 17.4 2.6 19.6 2.6L22.4 2.6" />
+            <path d="M12 14L10.7 18.2C10.4 19.4 9.4 20.3 8.2 20.3L6.3 20.3C4.8 20.3 4 21.6 4.7 22.9L5.3 23.9" />
+            <path d="M12 14L13.3 18.2C13.6 19.4 14.6 20.3 15.8 20.3L17.7 20.3C19.2 20.3 20 21.6 19.3 22.9L18.7 23.9" />
+          </svg>
           </div>
           <span className="font-semibold text-lg">SwiftRoute</span>
         </div>
