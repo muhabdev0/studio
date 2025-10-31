@@ -22,7 +22,7 @@ import {
   getFacetedRowModel,
   getFacetedUniqueValues,
 } from "@tanstack/react-table";
-import { collection, Timestamp, addDoc, doc, updateDoc } from "firebase/firestore";
+import { collection, Timestamp, addDoc, doc, updateDoc, deleteDoc } from "firebase/firestore";
 import { format, startOfWeek, endOfWeek, startOfMonth, endOfMonth, startOfYear, endOfYear, startOfDay, endOfDay } from "date-fns";
 import { enUS } from 'date-fns/locale';
 import type { DateRange } from "react-day-picker";
@@ -82,6 +82,16 @@ import { useToast } from "@/hooks/use-toast";
 import { KpiCard } from "@/components/dashboard/KpiCard";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useDataCache } from "@/lib/data-cache";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 const financeRecordTypes: FinanceRecord["type"][] = ["Income", "Expense"];
 const financeRecordCategories: FinanceRecord["category"][] = ["Ticket Sale", "Salary", "Maintenance", "Rent", "Other"];
@@ -96,131 +106,144 @@ const getCategoryBadgeVariant = (category: FinanceRecord["category"]) => {
     }
 }
 
-export const columns: ColumnDef<FinanceRecord>[] = [
-  {
-    id: "select",
-    header: ({ table }) => (
-      <Checkbox
-        checked={
-          table.getIsAllPageRowsSelected() ||
-          (table.getIsSomePageRowsSelected() && "indeterminate")
-        }
-        onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
-        aria-label="Select all"
-      />
-    ),
-    cell: ({ row }) => (
-      <Checkbox
-        checked={row.getIsSelected()}
-        onCheckedChange={(value) => row.toggleSelected(!!value)}
-        aria-label="Select row"
-      />
-    ),
-    enableSorting: false,
-    enableHiding: false,
-  },
-  {
-    accessorKey: "description",
-    header: "Description",
-  },
-  {
-    accessorKey: "type",
-    header: "Type",
-    cell: ({ row }) => {
-        const type = row.getValue("type") as "Income" | "Expense";
-        return <Badge variant={type === "Income" ? "default" : "destructive"}>{type}</Badge>
-    }
-  },
-   {
-    accessorKey: "category",
-    header: "Category",
-    cell: ({ row }) => {
-        const category = row.getValue("category") as FinanceRecord["category"];
-        if (category === 'Ticket Sale') {
-          return (
-            <div className="text-center">
-              <span className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold text-white bg-green-600">
-                {category}
-              </span>
-            </div>
-          );
-        }
-        return <Badge variant={getCategoryBadgeVariant(category)}>{category}</Badge>
-    }
-  },
-  {
-    accessorKey: "date",
-    header: ({ column }) => {
-      return (
-        <Button
-          variant="ghost"
-          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-        >
-          Date
-          <CaretSortIcon className="ml-2 h-4 w-4" />
-        </Button>
-      );
-    },
-    cell: ({ row }) => {
-      const timestamp = row.getValue("date") as Timestamp;
-      return <div>{timestamp.toDate().toLocaleDateString('en-US')}</div>;
-    },
-  },
-  {
-    accessorKey: "amount",
-    header: () => <div className="text-right">Amount</div>,
-    cell: ({ row }) => {
-      const amount = parseFloat(row.getValue("amount"));
-      const formatted = new Intl.NumberFormat("en-US", {
-        style: "currency",
-        currency: "USD",
-      }).format(amount);
-       const type = row.original.type;
-       const colorClass = type === 'Income' ? 'text-green-600' : 'text-red-600';
-
-      return <div className={`text-right font-medium ${colorClass}`}>{type === 'Income' ? '+' : '-'}{formatted}</div>;
-    },
-  },
-  {
-    id: "actions",
-    enableHiding: false,
-    cell: ({ row }) => {
-      const entry = row.original;
-
-      return (
-        <div className="text-right">
-            <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-                <Button variant="ghost" className="h-8 w-8 p-0">
-                <span className="sr-only">Open menu</span>
-                <DotsHorizontalIcon className="h-4 w-4" />
-                </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-                <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                <DropdownMenuItem
-                    onClick={() => navigator.clipboard.writeText(entry.id)}
-                >
-                Copy Entry ID
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem>Edit Entry</DropdownMenuItem>
-                <DropdownMenuItem className="text-destructive focus:text-destructive">
-                    Delete Entry
-                </DropdownMenuItem>
-            </DropdownMenuContent>
-            </DropdownMenu>
-        </div>
-      );
-    },
-  },
-];
-
-function FinanceTable({ data, isLoading }: { data: FinanceRecord[] | null | undefined, isLoading: boolean }) {
+function FinanceTable({ 
+    data, 
+    isLoading,
+    onEdit,
+    onDelete,
+ }: { 
+    data: FinanceRecord[] | null | undefined, 
+    isLoading: boolean,
+    onEdit: (entry: FinanceRecord) => void,
+    onDelete: (entry: FinanceRecord) => void,
+}) {
   const [sorting, setSorting] = React.useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([]);
   const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({});
   const [rowSelection, setRowSelection] = React.useState({});
+  
+  const columns: ColumnDef<FinanceRecord>[] = [
+    {
+      id: "select",
+      header: ({ table }) => (
+        <Checkbox
+          checked={
+            table.getIsAllPageRowsSelected() ||
+            (table.getIsSomePageRowsSelected() && "indeterminate")
+          }
+          onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
+          aria-label="Select all"
+        />
+      ),
+      cell: ({ row }) => (
+        <Checkbox
+          checked={row.getIsSelected()}
+          onCheckedChange={(value) => row.toggleSelected(!!value)}
+          aria-label="Select row"
+        />
+      ),
+      enableSorting: false,
+      enableHiding: false,
+    },
+    {
+      accessorKey: "description",
+      header: "Description",
+    },
+    {
+      accessorKey: "type",
+      header: "Type",
+      cell: ({ row }) => {
+          const type = row.getValue("type") as "Income" | "Expense";
+          return <Badge variant={type === "Income" ? "default" : "destructive"}>{type}</Badge>
+      }
+    },
+     {
+      accessorKey: "category",
+      header: "Category",
+      cell: ({ row }) => {
+          const category = row.getValue("category") as FinanceRecord["category"];
+          if (category === 'Ticket Sale') {
+            return (
+              <div className="text-center">
+                <span className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold text-white bg-green-600">
+                  {category}
+                </span>
+              </div>
+            );
+          }
+          return <Badge variant={getCategoryBadgeVariant(category)}>{category}</Badge>
+      }
+    },
+    {
+      accessorKey: "date",
+      header: ({ column }) => {
+        return (
+          <Button
+            variant="ghost"
+            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+          >
+            Date
+            <CaretSortIcon className="ml-2 h-4 w-4" />
+          </Button>
+        );
+      },
+      cell: ({ row }) => {
+        const timestamp = row.getValue("date") as Timestamp;
+        return <div>{timestamp.toDate().toLocaleDateString('en-US')}</div>;
+      },
+    },
+    {
+      accessorKey: "amount",
+      header: () => <div className="text-right">Amount</div>,
+      cell: ({ row }) => {
+        const amount = parseFloat(row.getValue("amount"));
+        const formatted = new Intl.NumberFormat("en-US", {
+          style: "currency",
+          currency: "USD",
+        }).format(amount);
+         const type = row.original.type;
+         const colorClass = type === 'Income' ? 'text-green-600' : 'text-red-600';
+  
+        return <div className={`text-right font-medium ${colorClass}`}>{type === 'Income' ? '+' : '-'}{formatted}</div>;
+      },
+    },
+    {
+      id: "actions",
+      enableHiding: false,
+      cell: ({ row }) => {
+        const entry = row.original;
+  
+        return (
+          <div className="text-right">
+              <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" className="h-8 w-8 p-0">
+                  <span className="sr-only">Open menu</span>
+                  <DotsHorizontalIcon className="h-4 w-4" />
+                  </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                  <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                  <DropdownMenuItem
+                      onClick={() => navigator.clipboard.writeText(entry.id)}
+                  >
+                  Copy Entry ID
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => onEdit(entry)}>Edit Entry</DropdownMenuItem>
+                  <DropdownMenuItem 
+                    className="text-destructive focus:text-destructive"
+                    onClick={() => onDelete(entry)}
+                  >
+                      Delete Entry
+                  </DropdownMenuItem>
+              </DropdownMenuContent>
+              </DropdownMenu>
+          </div>
+        );
+      },
+    },
+  ];
 
   const table = useReactTable({
     data: data ?? [],
@@ -369,14 +392,16 @@ function FinanceTable({ data, isLoading }: { data: FinanceRecord[] | null | unde
   );
 }
 
-function NewEntryDialog({
+function EntryDialog({
     open,
     onOpenChange,
-    onEntryCreated
+    onSave,
+    entry,
 } : {
     open: boolean;
     onOpenChange: (open: boolean) => void;
-    onEntryCreated: (entry: Omit<FinanceRecord, "id">) => Promise<void>;
+    onSave: (entry: Partial<FinanceRecord>) => void;
+    entry?: FinanceRecord | null;
 }) {
     const [type, setType] = React.useState<FinanceRecord["type"]>("Expense");
     const [category, setCategory] = React.useState<FinanceRecord["category"]>("Other");
@@ -384,24 +409,35 @@ function NewEntryDialog({
     const [date, setDate] = React.useState<Date>();
     const [description, setDescription] = React.useState("");
     const [isLoading, setIsLoading] = React.useState(false);
+    
     const { toast } = useToast();
+    const isEditMode = !!entry;
 
-    const resetForm = () => {
-        setType("Expense");
-        setCategory("Other");
-        setAmount(0);
-        setDate(undefined);
-        setDescription("");
-    }
+    React.useEffect(() => {
+        if (entry) {
+            setType(entry.type);
+            setCategory(entry.category);
+            setAmount(entry.amount);
+            setDate(entry.date.toDate());
+            setDescription(entry.description);
+        } else {
+            // Reset for new entry
+            setType("Expense");
+            setCategory("Other");
+            setAmount(0);
+            setDate(undefined);
+            setDescription("");
+        }
+    }, [entry, open]);
 
-    const handleCreateEntry = async () => {
+    const handleSave = async () => {
         if (!type || !category || amount <= 0 || !date || !description) {
             toast({ variant: "destructive", title: "Missing Information", description: "Please fill out all required fields."});
             return;
         }
 
         setIsLoading(true);
-        const newEntry: Omit<FinanceRecord, "id"> = {
+        const entryData: Partial<FinanceRecord> = {
             type,
             category,
             amount,
@@ -410,9 +446,8 @@ function NewEntryDialog({
         };
         
         try {
-            await onEntryCreated(newEntry);
+            await onSave(entryData);
             onOpenChange(false);
-            resetForm();
         } finally {
             setIsLoading(false);
         }
@@ -422,9 +457,9 @@ function NewEntryDialog({
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent className="sm:max-w-[425px]">
                 <DialogHeader>
-                    <DialogTitle>Add New Finance Entry</DialogTitle>
+                    <DialogTitle>{isEditMode ? 'Edit Finance Entry' : 'Add New Finance Entry'}</DialogTitle>
                     <DialogDescription>
-                        Enter the details for the new financial record.
+                        {isEditMode ? 'Update the details of the financial record.' : 'Enter the details for the new financial record.'}
                     </DialogDescription>
                 </DialogHeader>
                 <div className="grid gap-4 py-4">
@@ -484,8 +519,8 @@ function NewEntryDialog({
                     </div>
                 </div>
                 <DialogFooter>
-                    <Button onClick={handleCreateEntry} disabled={isLoading}>
-                        {isLoading ? "Creating..." : "Create Entry"}
+                    <Button onClick={handleSave} disabled={isLoading}>
+                        {isLoading ? "Saving..." : (isEditMode ? "Save Changes" : "Create Entry")}
                     </Button>
                 </DialogFooter>
             </DialogContent>
@@ -589,6 +624,10 @@ export default function FinancePage() {
   const { toast } = useToast();
   
   const [isNewEntryDialogOpen, setIsNewEntryDialogOpen] = React.useState(false);
+  const [isEditEntryDialogOpen, setIsEditEntryDialogOpen] = React.useState(false);
+  const [isDeleteEntryDialogOpen, setIsDeleteEntryDialogOpen] = React.useState(false);
+  const [selectedEntry, setSelectedEntry] = React.useState<FinanceRecord | null>(null);
+
   const [dateRangePreset, setDateRangePreset] = React.useState<DateRangePreset>("all");
   const [customDateRange, setCustomDateRange] = React.useState<DateRange | undefined>();
 
@@ -658,7 +697,7 @@ export default function FinancePage() {
   const salariesData = React.useMemo(() => expensesData?.filter(d => d.category === 'Salary'), [expensesData]);
   const maintenanceData = React.useMemo(() => expensesData?.filter(d => d.category === 'Maintenance'), [expensesData]);
 
-  const handleEntryCreated = async (newEntry: Omit<FinanceRecord, "id">) => {
+  const handleEntryCreated = async (newEntry: Partial<FinanceRecord>) => {
     const financeCollection = collection(firestore, 'financeRecords');
     try {
         await addDoc(financeCollection, newEntry);
@@ -667,6 +706,32 @@ export default function FinancePage() {
         console.error("Error creating finance entry:", error);
         toast({ variant: "destructive", title: "Error", description: "Could not create the new entry."});
     }
+  };
+
+  const handleEntryUpdated = async (updatedEntry: Partial<FinanceRecord>) => {
+    if (!selectedEntry) return;
+    const entryRef = doc(firestore, 'financeRecords', selectedEntry.id);
+    try {
+        await updateDoc(entryRef, updatedEntry);
+        toast({ title: "Entry Updated", description: "The financial record has been updated." });
+    } catch (error) {
+        console.error("Error updating entry:", error);
+        toast({ variant: "destructive", title: "Error", description: "Could not update the entry." });
+    }
+  };
+
+  const handleDeleteEntry = async () => {
+    if (!selectedEntry) return;
+    const entryRef = doc(firestore, "financeRecords", selectedEntry.id);
+    try {
+        await deleteDoc(entryRef);
+        toast({ title: "Entry Deleted", description: "The financial record has been removed." });
+    } catch (error) {
+        console.error("Error deleting entry:", error);
+        toast({ variant: "destructive", title: "Error", description: "Could not delete the entry." });
+    }
+    setIsDeleteEntryDialogOpen(false);
+    setSelectedEntry(null);
   };
 
   const handleMarkSalaryAsPaid = async (employee: Employee) => {
@@ -695,6 +760,16 @@ export default function FinancePage() {
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(value);
   }
+
+  const openEditDialog = (entry: FinanceRecord) => {
+    setSelectedEntry(entry);
+    setIsEditEntryDialogOpen(true);
+  };
+
+  const openDeleteDialog = (entry: FinanceRecord) => {
+    setSelectedEntry(entry);
+    setIsDeleteEntryDialogOpen(true);
+  };
 
   return (
     <>
@@ -789,19 +864,19 @@ export default function FinancePage() {
                     <TabsTrigger value="payroll">Payroll</TabsTrigger>
                 </TabsList>
                 <TabsContent value="all">
-                    <FinanceTable data={filteredData} isLoading={isLoading} />
+                    <FinanceTable data={filteredData} isLoading={isLoading} onEdit={openEditDialog} onDelete={openDeleteDialog}/>
                 </TabsContent>
                 <TabsContent value="income">
-                    <FinanceTable data={incomeData} isLoading={isLoading} />
+                    <FinanceTable data={incomeData} isLoading={isLoading} onEdit={openEditDialog} onDelete={openDeleteDialog}/>
                 </TabsContent>
                  <TabsContent value="expenses">
-                    <FinanceTable data={expensesData} isLoading={isLoading} />
+                    <FinanceTable data={expensesData} isLoading={isLoading} onEdit={openEditDialog} onDelete={openDeleteDialog}/>
                 </TabsContent>
                 <TabsContent value="salaries">
-                    <FinanceTable data={salariesData} isLoading={isLoading} />
+                    <FinanceTable data={salariesData} isLoading={isLoading} onEdit={openEditDialog} onDelete={openDeleteDialog}/>
                 </TabsContent>
                 <TabsContent value="maintenance">
-                    <FinanceTable data={maintenanceData} isLoading={isLoading} />
+                    <FinanceTable data={maintenanceData} isLoading={isLoading} onEdit={openEditDialog} onDelete={openDeleteDialog}/>
                 </TabsContent>
                 <TabsContent value="payroll">
                     <PayrollTab employees={employees ?? []} onMarkAsPaid={handleMarkSalaryAsPaid} />
@@ -810,13 +885,31 @@ export default function FinancePage() {
             </CardContent>
         </Card>
       </div>
-      <NewEntryDialog
+      <EntryDialog
         open={isNewEntryDialogOpen}
         onOpenChange={setIsNewEntryDialogOpen}
-        onEntryCreated={handleEntryCreated}
+        onSave={handleEntryCreated}
       />
+      <EntryDialog
+        open={isEditEntryDialogOpen}
+        onOpenChange={setIsEditEntryDialogOpen}
+        onSave={handleEntryUpdated}
+        entry={selectedEntry}
+      />
+       <AlertDialog open={isDeleteEntryDialogOpen} onOpenChange={setIsDeleteEntryDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete this financial record.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setSelectedEntry(null)}>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeleteEntry}>Delete</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }
-
-    
