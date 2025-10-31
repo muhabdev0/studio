@@ -51,7 +51,7 @@ export function AppSidebar() {
             strokeWidth="2.5"
             strokeLinecap="round"
             strokeLinejoin="round"
-            className="h-5 w-5 text-white"
+            className="h-5 w-5"
           >
             <path d="M13.4 2.6L10.6 2.6C8.4 2.6 7.5 4.3 8.1 6.3L10.3 12.8C10.5 13.5 11.2 14 11.9 14H12.1C12.8 14 13.5 13.5 13.7 12.8L15.9 6.3C16.5 4.3 15.6 2.6 13.4 2.6" />
             <path d="M10.3 12.8L8.1 6.3C7.5 4.3 6.6 2.6 4.4 2.6L1.6 2.6" />
