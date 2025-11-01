@@ -62,15 +62,15 @@ export default function LoginPage() {
     <main className="flex min-h-screen flex-col items-center justify-center bg-background p-4">
       <div className="absolute inset-0 -z-10 h-full w-full bg-background bg-[linear-gradient(to_right,#8080800a_1px,transparent_1px),linear-gradient(to_bottom,#8080800a_1px,transparent_1px)] bg-[size:14px_24px]"></div>
       <Card className="w-full max-w-sm border-2 border-primary/20 shadow-lg shadow-primary/10">
-        <CardHeader className="text-center">
-          <div className="mb-4 flex justify-center">
-            <Logo />
+        <CardHeader className="items-center text-center space-y-4">
+          <Logo />
+          <div className="space-y-1">
+            <CardTitle className="text-2xl font-bold text-primary">SwiftRoute</CardTitle>
+            <CardDescription>Enter your credentials to access the command center</CardDescription>
           </div>
-          <CardTitle className="text-2xl font-bold text-primary">SwiftRoute</CardTitle>
-          <CardDescription>Enter your credentials to access the command center</CardDescription>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleLogin} className="space-y-4">
+          <form onSubmit={handleLogin} className="space-y-6">
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
               <Input
