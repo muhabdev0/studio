@@ -20,7 +20,8 @@ function Logo() {
       xmlns="http://www.w3.org/2000/svg"
       className="h-10 w-10 text-primary"
     >
-      <path d="M18 8C18 5.79086 16.2091 4 14 4C11.7909 4 10 5.79086 10 8C10 10.2091 11.7909 12 14 12H10C7.79086 12 6 13.7909 6 16C6 18.2091 7.79086 20 10 20C12.2091 20 14 18.2091 14 16" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+      <path d="M17 6C17 8.76142 14.7614 11 12 11C9.23858 11 7 8.76142 7 6" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+      <path d="M7 18C7 15.2386 9.23858 13 12 13C14.7614 13 17 15.2386 17 18" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
     </svg>
   );
 }
